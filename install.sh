@@ -12,7 +12,7 @@ RED='\033[38;5;203m'; GREEN='\033[38;5;84m'; YELLOW='\033[38;5;221m'
 CYAN='\033[38;5;51m'; WHITE='\033[38;5;255m'; NC='\033[0m'
 BOLD='\033[1m'; ACC='\033[38;5;44m'; GRIS='\033[38;5;245m'
 
-GITHUB_RAW="https://raw.githubusercontent.com/rogellevi/HCR_BHTTP/main"
+GITHUB_RAW="https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main"
 BHTTP_BIN="/opt/bhttp/bhttp-server"
 HCR_BIN="/opt/hcr/hcr-server"
 UDPGW_BIN="/opt/udpgw/udpgw-server"

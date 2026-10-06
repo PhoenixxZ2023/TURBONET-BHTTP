@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ═══════════════════════════════════════════════════════════════
-#  WEB PANEL - INSTALADOR AUTOMÁTICO
-#  Repositorio: https://github.com/rogellevi/HCR_BHTTP
+#  PAINEL WEB - INSTALADOR AUTOMÁTICO
+#  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 # ═══════════════════════════════════════════════════════════════
 
 set -o pipefail
@@ -20,47 +20,47 @@ ui_top() { echo -e "${ACC} ═════════════════�
 ui_sep() { echo -e "${ACC}════════════════════════════════════════════════════════════${NC}"; }
 ui_bot() { echo -e "${ACC}════════════════════════════════════════════════════════════${NC}"; }
 ui_fila() { echo -e "${ACC}║${NC} $1 ${ACC}║${NC}"; }
-ui_titulo() { printf "${ACC}║${NC}                     ${WHITE}${BOLD}%s${NC}                     ${ACC}║${NC}\n" "$1"; }
+ui_titulo() { printf "${ACC}║${NC}                      ${WHITE}${BOLD}%s${NC}                      ${ACC}║${NC}\n" "$1"; }
 ui_ok() { echo -e "     ${GREEN}✓${NC} ${WHITE}$1${NC}"; }
 ui_error() { echo -e "     ${RED}✗${NC} ${RED}$1${NC}"; }
 ui_info() { echo -e "     ${CYAN}ℹ${NC} $1${NC}"; }
 
 verificar_root() {
     if [ "$EUID" -ne 0 ]; then
-        echo -e "${RED}✗ Este script requiere permisos de root${NC}"
+        echo -e "${RED}✗ Este script requer permissões de root${NC}"
         exit 1
     fi
 }
 
 instalar_dependencias() {
-    clear; ui_top; ui_titulo "1/5 INSTALANDO DEPENDENCIAS"; ui_sep; ui_fila ""
-    ui_info "Actualizando repositorios..."
+    clear; ui_top; ui_titulo "1/5 INSTALANDO DEPENDÊNCIAS"; ui_sep; ui_fila ""
+    ui_info "Atualizando repositórios..."
     apt-get update -y >/dev/null 2>&1
-    ui_info "Instalando Python3 y herramientas..."
+    ui_info "Instalando Python3 e ferramentas..."
     apt-get install -y python3 python3-pip python3-venv >/dev/null 2>&1
-    ui_ok "Dependencias instaladas"; ui_fila ""; sleep 1
+    ui_ok "Dependências instaladas"; ui_fila ""; sleep 1
 }
 
-crear_estructura() {
-    clear; ui_top; ui_titulo "2/5 CREANDO ESTRUCTURA"; ui_sep; ui_fila ""
-    ui_info "Creando directorios..."
+criar_estrutura() {
+    clear; ui_top; ui_titulo "2/5 CRIANDO ESTRUTURA"; ui_sep; ui_fila ""
+    ui_info "Criando diretórios..."
     mkdir -p "$PANEL_DIR/templates"
     cd "$PANEL_DIR" || exit 1
 
-    ui_info "Creando entorno virtual de Python..."
+    ui_info "Criando ambiente virtual do Python..."
     python3 -m venv venv >/dev/null 2>&1
     source venv/bin/activate
 
-    ui_info "Instalando Flask y dependencias..."
+    ui_info "Instalando Flask e dependências..."
     pip install flask flask-login psutil bcrypt >/dev/null 2>&1
-    ui_ok "Entorno configurado"; ui_fila ""; sleep 1
+    ui_ok "Ambiente configurado"; ui_fila ""; sleep 1
 }
 
-crear_app() {
-    clear; ui_top; ui_titulo "3/5 CREANDO APLICACIÓN"; ui_sep; ui_fila ""
-    ui_info "Creando archivo app.py..."
+criar_app() {
+    clear; ui_top; ui_titulo "3/5 CRIANDO APLICATIVO"; ui_sep; ui_fila ""
+    ui_info "Criando arquivo app.py..."
 
-    # IMPORTANTE: Usar <<'EOF_APP' (con comillas simples) para evitar expansión de variables
+    # IMPORTANTE: Usar <<'EOF_APP' (com aspas simples) para evitar a expansão de variáveis
     cat > "$PANEL_DIR/app.py" <<'EOF_APP'
 import os
 import subprocess
@@ -69,7 +69,7 @@ from flask import Flask, render_template, request, redirect, url_for, flash
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
 
 app = Flask(__name__)
-app.secret_key = 'hex_secret_key_cambiar_123'
+app.secret_key = 'hex_secret_key_mudar_123'
 
 login_manager = LoginManager()
 login_manager.init_app(app)
@@ -120,7 +120,7 @@ def login():
         if request.form['password'] == ADMIN_PASSWORD:
             login_user(User("admin"))
             return redirect(url_for('dashboard'))
-        flash('Contraseña incorrecta')
+        flash('Senha incorreta')
     return render_template('login.html')
 
 @app.route('/logout')
@@ -155,7 +155,7 @@ def add_user():
     
     success1, msg1 = run_cmd(f"useradd -m -s /bin/bash -G hexusers {user} 2>/dev/null")
     if not success1 and "already exists" not in msg1:
-        flash(f"Error al crear usuario: {msg1}")
+        flash(f"Erro ao criar usuário: {msg1}")
         return redirect(url_for('dashboard'))
     
     run_cmd(f"echo '{user}:{pwd}' | chpasswd")
@@ -165,7 +165,7 @@ def add_user():
     with open("/etc/hex/users.txt", "a") as f:
         f.write(f"{user}:{pwd}:{exp_date}\n")
     
-    flash(f"Usuario {user} creado exitosamente (Expira: {exp_date})")
+    flash(f"Usuário {user} criado com sucesso (Expira: {exp_date})")
     return redirect(url_for('dashboard'))
 
 @app.route('/delete_user/<username>')
@@ -173,31 +173,31 @@ def add_user():
 def delete_user(username):
     run_cmd(f"userdel -r {username} 2>/dev/null")
     run_cmd(f"sed -i '/^{username}:/d' /etc/hex/users.txt")
-    flash(f"Usuario {username} eliminado")
+    flash(f"Usuário {username} removido")
     return redirect(url_for('dashboard'))
 
 @app.route('/restart_service/<svc>')
 @login_required
 def restart_service(svc):
     run_cmd(f"systemctl restart '{svc}@*.service' 2>/dev/null")
-    flash(f"Servicio {svc.upper()} reiniciado")
+    flash(f"Serviço {svc.upper()} reiniciado")
     return redirect(url_for('dashboard'))
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=9000, debug=False)
 EOF_APP
 
-    ui_ok "app.py creado"; ui_fila ""; sleep 1
+    ui_ok "app.py criado"; ui_fila ""; sleep 1
 }
 
-crear_plantillas() {
-    clear; ui_top; ui_titulo "4/5 CREANDO INTERFAZ WEB"; ui_sep; ui_fila ""
-    ui_info "Creando plantillas HTML..."
+criar_templates() {
+    clear; ui_top; ui_titulo "4/5 CRIANDO INTERFACE WEB"; ui_sep; ui_fila ""
+    ui_info "Criando templates HTML..."
 
     # Login template
     cat > "$PANEL_DIR/templates/login.html" <<'EOF_LOGIN'
 <!DOCTYPE html>
-<html lang="es">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <title>Hex Panel - Login</title>
@@ -210,16 +210,16 @@ crear_plantillas() {
 </head>
 <body>
     <div class="card p-4" style="width: 350px;">
-        <h3 class="text-center mb-4 text-success">🔐 Panel</h3>
+        <h3 class="text-center mb-4 text-success">🔐 Painel</h3>
         {% with messages = get_flashed_messages() %}
           {% if messages %}<div class="alert alert-danger">{{ messages[0] }}</div>{% endif %}
         {% endwith %}
         <form method="POST">
             <div class="mb-3">
-                <label>Contraseña de Administrador</label>
+                <label>Senha de Administrador</label>
                 <input type="password" name="password" class="form-control bg-dark text-light" required>
             </div>
-            <button type="submit" class="btn btn-primary w-100">Ingresar</button>
+            <button type="submit" class="btn btn-primary w-100">Entrar</button>
         </form>
     </div>
 </body>
@@ -229,7 +229,7 @@ EOF_LOGIN
     # Dashboard template
     cat > "$PANEL_DIR/templates/dashboard.html" <<'EOF_DASH'
 <!DOCTYPE html>
-<html lang="es">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <title>Manager - Dashboard</title>
@@ -245,8 +245,8 @@ EOF_LOGIN
 <body>
     <nav class="navbar navbar-dark bg-dark border-bottom border-secondary">
         <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">Web Panel</span>
-            <a href="/logout" class="btn btn-outline-danger btn-sm">Cerrar Sesión</a>
+            <span class="navbar-brand mb-0 h1">Painel Web</span>
+            <a href="/logout" class="btn btn-outline-danger btn-sm">Sair</a>
         </div>
     </nav>
 
@@ -259,27 +259,27 @@ EOF_LOGIN
             <div class="col-md-3">
                 <div class="card p-3 text-center">
                     <h5 class="text-success">BHTTP</h5>
-                    <h2>{{ stats.bhttp }} <small class="text-muted">Puertos</small></h2>
+                    <h2>{{ stats.bhttp }} <small class="text-muted">Portas</small></h2>
                     <a href="/restart_service/bhttp" class="btn btn-sm btn-outline-success mt-2">Reiniciar</a>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card p-3 text-center">
                     <h5 class="text-info">HCR</h5>
-                    <h2>{{ stats.hcr }} <small class="text-muted">Puertos</small></h2>
+                    <h2>{{ stats.hcr }} <small class="text-muted">Portas</small></h2>
                     <a href="/restart_service/hcr" class="btn btn-sm btn-outline-info mt-2">Reiniciar</a>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card p-3 text-center">
                     <h5 class="text-warning">UDPGW</h5>
-                    <h2>{{ stats.udpgw }} <small class="text-muted">Puertos</small></h2>
+                    <h2>{{ stats.udpgw }} <small class="text-muted">Portas</small></h2>
                     <a href="/restart_service/udpgw" class="btn btn-sm btn-outline-warning mt-2">Reiniciar</a>
                 </div>
             </div>
             <div class="col-md-3">
                 <div class="card p-3 text-center">
-                    <h5 class="text-primary">Usuarios</h5>
+                    <h5 class="text-primary">Usuários</h5>
                     <h2>{{ stats.users }}</h2>
                 </div>
             </div>
@@ -288,31 +288,31 @@ EOF_LOGIN
         <div class="row">
             <div class="col-md-4">
                 <div class="card p-3">
-                    <h5 class="mb-3">➕ Agregar Usuario</h5>
+                    <h5 class="mb-3">➕ Adicionar Usuário</h5>
                     <form action="/add_user" method="POST">
                         <div class="mb-2">
-                            <input type="text" name="username" class="form-control bg-dark text-light" placeholder="Usuario" required>
+                            <input type="text" name="username" class="form-control bg-dark text-light" placeholder="Usuário" required>
                         </div>
                         <div class="mb-2">
-                            <input type="text" name="password" class="form-control bg-dark text-light" placeholder="Contraseña" required>
+                            <input type="text" name="password" class="form-control bg-dark text-light" placeholder="Senha" required>
                         </div>
                         <div class="mb-2">
-                            <input type="number" name="days" class="form-control bg-dark text-light" placeholder="Días de validez" required>
+                            <input type="number" name="days" class="form-control bg-dark text-light" placeholder="Dias de validade" required>
                         </div>
-                        <button type="submit" class="btn btn-success w-100">Crear Usuario</button>
+                        <button type="submit" class="btn btn-success w-100">Criar Usuário</button>
                     </form>
                 </div>
             </div>
             <div class="col-md-8">
                 <div class="card p-3">
-                    <h5 class="mb-3">👥 Usuarios Activos</h5>
+                    <h5 class="mb-3">👥 Usuários Ativos</h5>
                     <div class="table-responsive">
                         <table class="table table-dark table-hover">
                             <thead>
                                 <tr>
-                                    <th>Usuario</th>
-                                    <th>Expiración</th>
-                                    <th>Acción</th>
+                                    <th>Usuário</th>
+                                    <th>Expiração</th>
+                                    <th>Ação</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -321,11 +321,11 @@ EOF_LOGIN
                                     <td>{{ u.user }}</td>
                                     <td>{{ u.exp }}</td>
                                     <td>
-                                        <a href="/delete_user/{{ u.user }}" class="btn btn-sm btn-danger" onclick="return confirm('¿Eliminar este usuario?')">🗑️</a>
+                                        <a href="/delete_user/{{ u.user }}" class="btn btn-sm btn-danger" onclick="return confirm('Remover este usuário?')">🗑️</a>
                                     </td>
                                 </tr>
                                 {% else %}
-                                <tr><td colspan="3" class="text-center text-muted">No hay usuarios registrados</td></tr>
+                                <tr><td colspan="3" class="text-center text-muted">Não há usuários registrados</td></tr>
                                 {% endfor %}
                             </tbody>
                         </table>
@@ -338,12 +338,12 @@ EOF_LOGIN
 </html>
 EOF_DASH
 
-    ui_ok "Plantillas creadas"; ui_fila ""; sleep 1
+    ui_ok "Templates criados"; ui_fila ""; sleep 1
 }
 
-configurar_servicio() {
-    clear; ui_top; ui_titulo "5/5 CONFIGURANDO SERVICIO"; ui_sep; ui_fila ""
-    ui_info "Creando servicio systemd..."
+configurar_servico() {
+    clear; ui_top; ui_titulo "5/5 CONFIGURANDO SERVIÇO"; ui_sep; ui_fila ""
+    ui_info "Criando serviço systemd..."
 
     cat > /etc/systemd/system/hex-webpanel.service <<EOF
 [Unit]
@@ -364,43 +364,43 @@ EOF
     systemctl daemon-reload >/dev/null 2>&1
     systemctl enable hex-webpanel.service >/dev/null 2>&1
 
-    ui_info "Abriendo puerto $PANEL_PORT en firewall..."
+    ui_info "Abrindo a porta $PANEL_PORT no firewall..."
     iptables -I INPUT -p tcp --dport $PANEL_PORT -j ACCEPT 2>/dev/null
     command -v ufw >/dev/null 2>&1 && ufw allow $PANEL_PORT/tcp >/dev/null 2>&1
 
-    ui_info "Iniciando panel web..."
+    ui_info "Iniciando painel web..."
     systemctl start hex-webpanel.service
 
     sleep 2
     if systemctl is-active --quiet hex-webpanel.service; then
-        ui_ok "Panel web activo"
+        ui_ok "Painel web ativo"
     else
-        ui_error "El panel no pudo iniciar"
+        ui_error "O painel não pôde iniciar"
     fi
 
     ui_fila ""; sleep 1
 }
 
-mostrar_resumen() {
-    clear; ui_top; ui_titulo "✓ INSTALACIÓN COMPLETADA"; ui_sep; ui_fila ""
-    ui_fila "  ${GREEN}${BOLD}Panel Web instalado exitosamente${NC}"
+mostrar_resumo() {
+    clear; ui_top; ui_titulo "✓ INSTALAÇÃO CONCLUÍDA"; ui_sep; ui_fila ""
+    ui_fila "  ${GREEN}${BOLD}Painel Web instalado com sucesso${NC}"
     ui_fila ""
     ui_fila "  ${BOLD}URL:${NC}        ${CYAN}http://$(hostname -I | awk '{print $1}'):$PANEL_PORT${NC}"
-    ui_fila "  ${BOLD}Usuario:${NC}    ${YELLOW}admin${NC}"
-    ui_fila "  ${BOLD}Contraseña:${NC} ${YELLOW}$ADMIN_PASS${NC}"
+    ui_fila "  ${BOLD}Usuário:${NC}    ${YELLOW}admin${NC}"
+    ui_fila "  ${BOLD}Senha:${NC}      ${YELLOW}$ADMIN_PASS${NC}"
     ui_fila ""
     ui_sep
-    ui_fila "  ${RED}${BOLD}⚠ IMPORTANTE:${NC} Cambia la contraseña en:"
+    ui_fila "  ${RED}${BOLD}⚠ IMPORTANTE:${NC} Altere a senha em:"
     ui_fila "  ${YELLOW}$PANEL_DIR/app.py${NC}"
     ui_fila ""
     ui_bot; echo ""
 }
 
-# EJECUCIÓN
+# EXECUÇÃO
 verificar_root
 instalar_dependencias
-crear_estructura
-crear_app
-crear_plantillas
-configurar_servicio
-mostrar_resumen
+criar_estrutura
+criar_app
+criar_templates
+configurar_servico
+mostrar_resumo

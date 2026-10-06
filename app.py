@@ -7,7 +7,7 @@ logging.basicConfig(filename='/var/log/hex-webpanel.log', level=logging.INFO,
                     format='%(asctime)s - %(levelname)s - %(message)s')
 
 app = Flask(__name__)
-app.secret_key = 'hex_secret_key_cambiar_123'
+app.secret_key = 'hex_secret_key_mudar_123'
 login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
@@ -34,11 +34,11 @@ RM = '/bin/rm'
 WEBPANEL_PORT_FILE = "/etc/hex/webpanel_port.conf"
 VERSION_FILE = "/etc/hex/version"
 UPDATE_CACHE_FILE = "/tmp/hex_update_cache.json"
-GITHUB_RAW = "https://raw.githubusercontent.com/rogellevi/HCR_BHTTP/main"
+GITHUB_RAW = "https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main"
 CACHE_DURATION = 300
 
 # ═══════════════════════════════════════════════════════════════
-#  SISTEMA DE CONTRASEÑAS CON BCRYPT
+#  SISTEMA DE SENHAS COM BCRYPT
 # ═══════════════════════════════════════════════════════════════
 
 def hash_password(password):
@@ -49,7 +49,7 @@ def verify_password(password, hashed):
     try:
         return bcrypt.checkpw(password.encode('utf-8'), hashed.encode('utf-8'))
     except Exception as e:
-        logging.error(f"Error verificando contraseña: {e}")
+        logging.error(f"Erro ao verificar senha: {e}")
         return False
 
 def is_bcrypt_hash(value):
@@ -65,7 +65,7 @@ def save_password_hash(hashed_password):
         os.chmod(PASSWORD_FILE, 0o600)
         return True
     except Exception as e:
-        logging.error(f"Error guardando hash: {e}")
+        logging.error(f"Erro ao salvar hash: {e}")
         return False
 
 def load_admin_password():
@@ -74,22 +74,22 @@ def load_admin_password():
         if os.path.exists(PASSWORD_FILE):
             stored = open(PASSWORD_FILE).read().strip()
             if not is_bcrypt_hash(stored):
-                logging.info("Migrando contraseña de texto plano a bcrypt...")
+                logging.info("Migrando senha de texto plano para bcrypt...")
                 stored = hash_password(stored)
                 save_password_hash(stored)
             ADMIN_PASSWORD_HASH = stored
         else:
-            logging.info("Creando archivo de contraseña con valor por defecto...")
+            logging.info("Criando arquivo de senha com valor padrão...")
             ADMIN_PASSWORD_HASH = hash_password(DEFAULT_PASSWORD)
             save_password_hash(ADMIN_PASSWORD_HASH)
     except Exception as e:
-        logging.error(f"Error cargando contraseña: {e}")
+        logging.error(f"Erro ao carregar senha: {e}")
         ADMIN_PASSWORD_HASH = hash_password(DEFAULT_PASSWORD)
 
 load_admin_password()
 
 # ═══════════════════════════════════════════════════════════════
-#  UTILIDADES
+#  UTILITÁRIOS
 # ═══════════════════════════════════════════════════════════════
 
 def get_webpanel_port():
@@ -124,11 +124,11 @@ def get_users():
                     if len(parts) == 3: 
                         users.append({"user": parts[0], "exp": parts[2]})
         except Exception as e:
-            logging.error(f"Error leyendo users.txt: {e}")
+            logging.error(f"Erro ao ler users.txt: {e}")
     return users
 
 # ═══════════════════════════════════════════════════════════════
-#  COMPARACIÓN SEMÁNTICA DE VERSIONES
+#  COMPARAÇÃO SEMÂNTICA DE VERSÕES
 # ═══════════════════════════════════════════════════════════════
 
 def compare_versions(v1, v2):
@@ -154,11 +154,11 @@ def compare_versions(v1, v2):
             if a < b: return -1
         return 0
     except Exception as e:
-        logging.error(f"Error comparando versiones {v1} vs {v2}: {e}")
+        logging.error(f"Erro ao comparar versões {v1} vs {v2}: {e}")
         return 0
 
 # ═══════════════════════════════════════════════════════════════
-#  SISTEMA DE ACTUALIZACIONES
+#  SISTEMA DE ATUALIZAÇÕES
 # ═══════════════════════════════════════════════════════════════
 
 def get_local_version():
@@ -187,7 +187,7 @@ def check_updates():
             remote_data = json.loads(response.read().decode())
         
         remote_version = remote_data.get('version', local_version)
-        changelog = remote_data.get('changelog', 'Nuevas mejoras disponibles')
+        changelog = remote_data.get('changelog', 'Novas melhorias disponíveis')
         
         version_comparison = compare_versions(remote_version, local_version)
         has_update = version_comparison == 1
@@ -208,7 +208,7 @@ def check_updates():
         
         return result
     except Exception as e:
-        logging.error(f"Error verificando actualizaciones: {e}")
+        logging.error(f"Erro ao verificar atualizações: {e}")
         return {
             "has_update": False,
             "local_version": get_local_version(),
@@ -247,13 +247,13 @@ def perform_update():
     }
     timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     
-    # Preservar archivo de contraseña
+    # Preservar arquivo de senha
     password_backup = None
     if os.path.exists(PASSWORD_FILE):
         with open(PASSWORD_FILE, 'r') as f:
             password_backup = f.read()
     
-    # 1. Actualizar menú
+    # 1. Atualizar menu
     try:
         menu_backup = f"/usr/local/bin/hex_menu.backup.{timestamp}"
         if os.path.exists("/usr/local/bin/hex_menu"):
@@ -265,15 +265,15 @@ def perform_update():
             if syntax_check.returncode == 0:
                 subprocess.run([MV, '/tmp/hex_menu_new.sh', '/usr/local/bin/hex_menu'], capture_output=True)
                 os.chmod('/usr/local/bin/hex_menu', 0o755)
-                results["menu"] = {"success": True, "message": "Menú actualizado"}
+                results["menu"] = {"success": True, "message": "Menu atualizado"}
             else:
-                results["menu"] = {"success": False, "message": "Error de sintaxis"}
+                results["menu"] = {"success": False, "message": "Erro de sintaxe"}
         else:
-            results["menu"] = {"success": False, "message": "Error de descarga"}
+            results["menu"] = {"success": False, "message": "Erro de download"}
     except Exception as e:
         results["menu"] = {"success": False, "message": str(e)}
     
-    # 2. Actualizar templates
+    # 2. Atualizar templates
     try:
         templates_dir = "/opt/hex-webpanel/templates"
         if os.path.exists(templates_dir):
@@ -284,15 +284,15 @@ def perform_update():
             dash_ok = subprocess.run([CURL, '-fsSL', f"{GITHUB_RAW}/templates/dashboard.html", 
                                      '-o', f"{templates_dir}/dashboard.html"], capture_output=True, timeout=30).returncode == 0
             if login_ok and dash_ok:
-                results["templates"] = {"success": True, "message": "Templates actualizados"}
+                results["templates"] = {"success": True, "message": "Templates atualizados"}
             else:
-                results["templates"] = {"success": False, "message": "Error en algunos templates"}
+                results["templates"] = {"success": False, "message": "Erro em alguns templates"}
         else:
-            results["templates"] = {"success": True, "message": "Panel no instalado, omitido"}
+            results["templates"] = {"success": True, "message": "Painel não instalado, ignorado"}
     except Exception as e:
         results["templates"] = {"success": False, "message": str(e)}
     
-    # 3. Actualizar backend
+    # 3. Atualizar backend
     try:
         if os.path.exists("/opt/hex-webpanel/app.py"):
             app_backup = f"/opt/hex-webpanel/app.py.backup.{timestamp}"
@@ -303,17 +303,17 @@ def perform_update():
                 syntax_check = subprocess.run(['python3', '-m', 'py_compile', '/tmp/app_new.py'], capture_output=True)
                 if syntax_check.returncode == 0:
                     subprocess.run([MV, '/tmp/app_new.py', '/opt/hex-webpanel/app.py'], capture_output=True)
-                    results["backend"] = {"success": True, "message": "Backend actualizado"}
+                    results["backend"] = {"success": True, "message": "Backend atualizado"}
                 else:
-                    results["backend"] = {"success": False, "message": "Error de sintaxis"}
+                    results["backend"] = {"success": False, "message": "Erro de sintaxe"}
             else:
-                results["backend"] = {"success": False, "message": "Error de descarga"}
+                results["backend"] = {"success": False, "message": "Erro de download"}
         else:
-            results["backend"] = {"success": True, "message": "Panel no instalado, omitido"}
+            results["backend"] = {"success": True, "message": "Painel não instalado, ignorado"}
     except Exception as e:
         results["backend"] = {"success": False, "message": str(e)}
     
-    # 4. Actualizar versión
+    # 4. Atualizar versão
     try:
         res = subprocess.run([CURL, '-fsSL', f"{GITHUB_RAW}/version.json", '-o', '/tmp/version_new.json'],
                            capture_output=True, text=True, timeout=30)
@@ -324,24 +324,24 @@ def perform_update():
             if new_version:
                 with open(VERSION_FILE, 'w') as f:
                     f.write(new_version)
-                results["version"] = {"success": True, "message": f"Versión actualizada a {new_version}"}
+                results["version"] = {"success": True, "message": f"Versão atualizada para {new_version}"}
             subprocess.run([RM, '/tmp/version_new.json'], capture_output=True)
         else:
-            results["version"] = {"success": False, "message": "Error al obtener versión"}
+            results["version"] = {"success": False, "message": "Erro ao obter versão"}
     except Exception as e:
         results["version"] = {"success": False, "message": str(e)}
     
-    # Restaurar archivo de contraseña si fue modificado
+    # Restaurar arquivo de senha se foi modificado
     if password_backup and os.path.exists(PASSWORD_FILE):
         with open(PASSWORD_FILE, 'r') as f:
             current = f.read()
         if current != password_backup:
             with open(PASSWORD_FILE, 'w') as f:
                 f.write(password_backup)
-            logging.info("Archivo de contraseña restaurado después de actualización")
+            logging.info("Arquivo de senha restaurado após atualização")
     
     invalidate_update_cache()
-    logging.info(f"Actualización completada: {results}")
+    logging.info(f"Atualização concluída: {results}")
     return results
     
 def get_stats_data():
@@ -369,11 +369,11 @@ def get_stats_data():
             "update_info": check_updates()
         }
     except Exception as e:
-        logging.error(f"Error obteniendo stats: {e}")
+        logging.error(f"Erro ao obter stats: {e}")
         return None
 
 # ═══════════════════════════════════════════════════════════════
-#  RUTAS
+#  ROTAS
 # ═══════════════════════════════════════════════════════════════
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -382,10 +382,10 @@ def login():
         password = request.form.get('password', '')
         if ADMIN_PASSWORD_HASH and verify_password(password, ADMIN_PASSWORD_HASH):
             login_user(User("admin"))
-            logging.info(f"Login exitoso desde {request.remote_addr}")
+            logging.info(f"Login com sucesso de {request.remote_addr}")
             return redirect(url_for('dashboard'))
-        logging.warning(f"Intento de login fallido desde {request.remote_addr}")
-        flash('Contraseña incorrecta')
+        logging.warning(f"Tentativa de login falhou de {request.remote_addr}")
+        flash('Senha incorreta')
     return render_template('login.html')
 
 @app.route('/logout')
@@ -399,7 +399,7 @@ def logout():
 def dashboard():
     stats = get_stats_data()
     if stats is None:
-        flash("Error al cargar el dashboard")
+        flash("Erro ao carregar o dashboard")
         stats = {
             "bhttp_ports":[], "hcr_ports":[], "udpgw_ports":[],
             "bhttp_active":0, "hcr_active":0, "udpgw_active":0,
@@ -416,7 +416,7 @@ def dashboard():
 def api_stats():
     stats = get_stats_data()
     if stats is None:
-        return jsonify({"error": "No se pudieron obtener las estadísticas"}), 500
+        return jsonify({"error": "Não foi possível obter as estatísticas"}), 500
     return jsonify(stats)
 
 @app.route('/change_password', methods=['POST'])
@@ -428,43 +428,43 @@ def change_password():
         new_pass = request.form.get('new_password', '')
         confirm_pass = request.form.get('confirm_password', '')
         
-        logging.info(f"[CHANGE_PASS] Solicitud desde {request.remote_addr}")
+        logging.info(f"[CHANGE_PASS] Solicitação de {request.remote_addr}")
         
         if not new_pass or len(new_pass) < 4:
-            flash("La nueva contraseña debe tener al menos 4 caracteres")
+            flash("A nova senha deve ter pelo menos 4 caracteres")
             return redirect(url_for('dashboard'))
         if new_pass != confirm_pass:
-            flash("Las contraseñas nuevas no coinciden")
+            flash("As novas senhas não coincidem")
             return redirect(url_for('dashboard'))
         if not verify_password(current_pass, ADMIN_PASSWORD_HASH):
-            flash("La contraseña actual es incorrecta")
+            flash("A senha atual está incorreta")
             return redirect(url_for('dashboard'))
         if verify_password(new_pass, ADMIN_PASSWORD_HASH):
-            flash("La nueva contraseña debe ser diferente a la actual")
+            flash("A nova senha deve ser diferente da atual")
             return redirect(url_for('dashboard'))
         
         new_hash = hash_password(new_pass)
         if save_password_hash(new_hash):
             ADMIN_PASSWORD_HASH = new_hash
-            logging.info("[CHANGE_PASS] ✓ Contraseña cambiada exitosamente")
-            flash("✓ Contraseña cambiada exitosamente. Cierra sesión para aplicar los cambios.")
+            logging.info("[CHANGE_PASS] ✓ Senha alterada com sucesso")
+            flash("✓ Senha alterada com sucesso. Saia para aplicar as alterações.")
         else:
-            flash("Error al guardar la contraseña")
+            flash("Erro ao salvar a senha")
     except Exception as e:
-        logging.error(f"[CHANGE_PASS] Error: {e}", exc_info=True)
-        flash(f"Error: {str(e)}")
+        logging.error(f"[CHANGE_PASS] Erro: {e}", exc_info=True)
+        flash(f"Erro: {str(e)}")
     return redirect(url_for('dashboard'))
 
 @app.route('/update_now', methods=['POST'])
 @login_required
 def update_now():
     try:
-        logging.info("Iniciando actualización desde el panel web")
+        logging.info("Iniciando atualização pelo painel web")
         results = perform_update()
         
         if results["backend"]["success"] or results["templates"]["success"]:
             schedule_restart()
-            restart_msg = "El panel se reiniciará automáticamente en unos segundos."
+            restart_msg = "O painel será reiniciado automaticamente em alguns segundos."
         else:
             restart_msg = ""
         
@@ -473,14 +473,14 @@ def update_now():
         
         return jsonify({
             "success": True,
-            "message": f"Actualización completada: {success_count}/{total_count} componentes",
+            "message": f"Atualização concluída: {success_count}/{total_count} componentes",
             "details": results,
             "restart": restart_msg,
             "will_reload": results["backend"]["success"] or results["templates"]["success"]
         })
     except Exception as e:
-        logging.error(f"Error en actualización: {e}", exc_info=True)
-        return jsonify({"success": False, "message": f"Error: {str(e)}"}), 500
+        logging.error(f"Erro em atualização: {e}", exc_info=True)
+        return jsonify({"success": False, "message": f"Erro: {str(e)}"}), 500
 
 @app.route('/add_user', methods=['POST'])
 @login_required
@@ -491,15 +491,15 @@ def add_user():
         days = int(request.form['days'])
         
         if not user or not pwd or days < 1:
-            flash("Todos los campos son obligatorios y los días deben ser positivos")
+            flash("Todos os campos são obrigatórios e os dias devem ser positivos")
             return redirect(url_for('dashboard'))
         if not user.isalnum() and not all(c.isalnum() or c in '_-' for c in user):
-            flash("El usuario solo puede contener letras, números, guiones y guiones bajos")
+            flash("O usuário pode conter apenas letras, números, hifens e underlines")
             return redirect(url_for('dashboard'))
         
         check_user = subprocess.run([ID, user], capture_output=True, text=True)
         if check_user.returncode == 0:
-            flash(f"El usuario '{user}' ya existe en el sistema")
+            flash(f"O usuário '{user}' já existe no sistema")
             return redirect(url_for('dashboard'))
         
         check_group = subprocess.run([GETENT, 'group', 'hexusers'], capture_output=True, text=True)
@@ -511,12 +511,12 @@ def add_user():
         res = subprocess.run([USERADD, '-m', '-s', '/bin/bash', '-G', 'hexusers', user], 
                            capture_output=True, text=True)
         if res.returncode != 0:
-            flash(f"Error al crear usuario: {res.stderr}")
+            flash(f"Erro ao criar usuário: {res.stderr}")
             return redirect(url_for('dashboard'))
         
         res_pwd = subprocess.run([CHPASSWD], input=f"{user}:{pwd}", text=True, capture_output=True)
         if res_pwd.returncode != 0:
-            flash(f"Error al establecer contraseña: {res_pwd.stderr}")
+            flash(f"Erro ao definir senha: {res_pwd.stderr}")
             subprocess.run([USERDEL, '-r', user], capture_output=True)
             return redirect(url_for('dashboard'))
         
@@ -526,14 +526,14 @@ def add_user():
         with open("/etc/hex/users.txt", "a") as f: 
             f.write(f"{user}:{pwd}:{exp_date}\n")
         
-        flash(f"✓ Usuario '{user}' creado exitosamente (Expira: {exp_date})")
+        flash(f"✓ Usuário '{user}' criado com sucesso (Expira: {exp_date})")
         return redirect(url_for('dashboard'))
     except ValueError:
-        flash("Error: Los días deben ser un número válido")
+        flash("Erro: Os dias devem ser um número válido")
         return redirect(url_for('dashboard'))
     except Exception as e:
-        logging.error(f"Error creando usuario: {str(e)}", exc_info=True)
-        flash(f"Error inesperado: {str(e)}")
+        logging.error(f"Erro criando usuário: {str(e)}", exc_info=True)
+        flash(f"Erro inesperado: {str(e)}")
         return redirect(url_for('dashboard'))
 
 @app.route('/delete_user/<username>')
@@ -548,39 +548,39 @@ def delete_user(username):
                 for line in lines:
                     if not line.startswith(f"{username}:"):
                         f.write(line)
-        flash(f"✓ Usuario '{username}' eliminado correctamente")
+        flash(f"✓ Usuário '{username}' removido com sucesso")
     except Exception as e:
-        logging.error(f"Error eliminando usuario: {e}")
-        flash(f"Error al eliminar usuario: {str(e)}")
+        logging.error(f"Erro removendo usuário: {e}")
+        flash(f"Erro ao remover usuário: {str(e)}")
     return redirect(url_for('dashboard'))
 
 @app.route('/edit_password/<username>', methods=['POST'])
 @login_required
 def edit_password(username):
-    """Cambia la contraseña de un usuario desde el dashboard"""
+    """Altera a senha de um usuário pelo dashboard"""
     try:
         new_pass = request.form.get('new_password', '')
         confirm_pass = request.form.get('confirm_password', '')
         
-        logging.info(f"[EDIT_PASS] Cambio de contraseña para {username} desde {request.remote_addr}")
+        logging.info(f"[EDIT_PASS] Troca de senha para {username} de {request.remote_addr}")
         
         if not new_pass or len(new_pass) < 4:
-            flash("La contraseña debe tener al menos 4 caracteres")
+            flash("A senha deve ter pelo menos 4 caracteres")
             return redirect(url_for('dashboard'))
         
         if new_pass != confirm_pass:
-            flash("Las contraseñas no coinciden")
+            flash("As novas senhas não coincidem")
             return redirect(url_for('dashboard'))
         
         check_user = subprocess.run([ID, username], capture_output=True, text=True)
         if check_user.returncode != 0:
-            flash(f"El usuario '{username}' no existe")
+            flash(f"O usuário '{username}' não existe")
             return redirect(url_for('dashboard'))
         
         res_pwd = subprocess.run([CHPASSWD], input=f"{username}:{new_pass}", 
                                 text=True, capture_output=True)
         if res_pwd.returncode != 0:
-            flash(f"Error al cambiar contraseña: {res_pwd.stderr}")
+            flash(f"Erro ao alterar senha: {res_pwd.stderr}")
             return redirect(url_for('dashboard'))
         
         if os.path.exists("/etc/hex/users.txt"):
@@ -597,27 +597,27 @@ def edit_password(username):
                     else:
                         f.write(line)
         
-        logging.info(f"[EDIT_PASS] ✓ Contraseña de {username} cambiada")
-        flash(f"✓ Contraseña de '{username}' cambiada exitosamente")
+        logging.info(f"[EDIT_PASS] ✓ Senha de {username} alterada")
+        flash(f"✓ Senha de '{username}' alterada com sucesso")
         
     except Exception as e:
-        logging.error(f"[EDIT_PASS] Error: {e}", exc_info=True)
-        flash(f"Error: {str(e)}")
+        logging.error(f"[EDIT_PASS] Erro: {e}", exc_info=True)
+        flash(f"Erro: {str(e)}")
     
     return redirect(url_for('dashboard'))
 
 @app.route('/edit_expiry/<username>', methods=['POST'])
 @login_required
 def edit_expiry(username):
-    """Cambia la fecha de expiración de un usuario desde el dashboard"""
+    """Altera a data de expiração de um usuário pelo dashboard"""
     try:
         action = request.form.get('action', '')
         
-        logging.info(f"[EDIT_EXP] Cambio de expiración para {username} desde {request.remote_addr}")
+        logging.info(f"[EDIT_EXP] Troca de expiração para {username} de {request.remote_addr}")
         
         check_user = subprocess.run([ID, username], capture_output=True, text=True)
         if check_user.returncode != 0:
-            flash(f"El usuario '{username}' no existe")
+            flash(f"O usuário '{username}' não existe")
             return redirect(url_for('dashboard'))
         
         new_exp = ""
@@ -626,17 +626,17 @@ def edit_expiry(username):
             subprocess.run([CHAGE, '-E', '-1', username], capture_output=True)
             subprocess.run([USERMOD, '-e', '', username], capture_output=True)
             new_exp = "2099-12-31"
-            flash(f"✓ Usuario '{username}' ahora es permanente")
+            flash(f"✓ Usuário '{username}' agora é permanente")
             
         elif action == "custom":
             custom_date = request.form.get('custom_date', '')
             if not custom_date:
-                flash("Debes ingresar una fecha")
+                flash("Você deve inserir uma data")
                 return redirect(url_for('dashboard'))
             new_exp = custom_date
             subprocess.run([CHAGE, '-E', new_exp, username], capture_output=True)
             subprocess.run([USERMOD, '-e', new_exp, username], capture_output=True)
-            flash(f"✓ Expiración de '{username}' cambiada a {new_exp}")
+            flash(f"✓ Expiração de '{username}' alterada para {new_exp}")
             
         elif action.startswith("extend_"):
             days = int(action.split("_")[1])
@@ -665,10 +665,10 @@ def edit_expiry(username):
             
             subprocess.run([CHAGE, '-E', new_exp, username], capture_output=True)
             subprocess.run([USERMOD, '-e', new_exp, username], capture_output=True)
-            flash(f"✓ Expiración de '{username}' extendida a {new_exp} (+{days} días)")
+            flash(f"✓ Expiração de '{username}' estendida para {new_exp} (+{days} dias)")
             
         else:
-            flash("Acción inválida")
+            flash("Ação inválida")
             return redirect(url_for('dashboard'))
         
         if new_exp and os.path.exists("/etc/hex/users.txt"):
@@ -685,11 +685,11 @@ def edit_expiry(username):
                     else:
                         f.write(line)
         
-        logging.info(f"[EDIT_EXP] ✓ Expiración de {username} cambiada a {new_exp}")
+        logging.info(f"[EDIT_EXP] ✓ Expiração de {username} alterada para {new_exp}")
         
     except Exception as e:
-        logging.error(f"[EDIT_EXP] Error: {e}", exc_info=True)
-        flash(f"Error: {str(e)}")
+        logging.error(f"[EDIT_EXP] Erro: {e}", exc_info=True)
+        flash(f"Erro: {str(e)}")
     
     return redirect(url_for('dashboard'))
 
@@ -698,22 +698,22 @@ def edit_expiry(username):
 def control_service(svc, action):
     try:
         if svc not in ['bhttp', 'hcr', 'udpgw']:
-            flash(f"Servicio inválido: {svc}")
+            flash(f"Serviço inválido: {svc}")
             return redirect(url_for('dashboard'))
         if action not in ['start', 'stop', 'restart']:
-            flash(f"Acción inválida: {action}")
+            flash(f"Ação inválida: {action}")
             return redirect(url_for('dashboard'))
         
         conf_file = f"/etc/hex/{svc}_ports.conf"
         if not os.path.exists(conf_file):
-            flash(f"No hay puertos configurados para {svc.upper()}")
+            flash(f"Não há portas configuradas para {svc.upper()}")
             return redirect(url_for('dashboard'))
         
         with open(conf_file, 'r') as f:
             ports = [p.strip() for p in f.readlines() if p.strip()]
         
         if not ports:
-            flash(f"No hay puertos configurados para {svc.upper()}")
+            flash(f"Não há portas configuradas para {svc.upper()}")
             return redirect(url_for('dashboard'))
         
         success_count = 0
@@ -726,13 +726,19 @@ def control_service(svc, action):
             else:
                 error_count += 1
         
+        # Traduz a ação apenas para exibir o flash com mais coesão ("start" -> "Start", etc.)
+        acao_traduzida = action.capitalize()
+        if action == 'start': acao_traduzida = "Início"
+        elif action == 'stop': acao_traduzida = "Parada"
+        elif action == 'restart': acao_traduzida = "Reinício"
+
         if error_count == 0:
-            flash(f"✓ {svc.upper()}: {action.capitalize()} exitoso en {success_count} puerto(s)")
+            flash(f"✓ {svc.upper()}: Ação '{acao_traduzida}' com sucesso em {success_count} porta(s)")
         else:
-            flash(f"⚠ {svc.upper()}: {success_count} exitoso(s), {error_count} error(es)")
+            flash(f"⚠ {svc.upper()}: {success_count} com sucesso, {error_count} erro(s)")
     except Exception as e:
-        logging.error(f"Error controlando servicio: {e}")
-        flash(f"Error: {str(e)}")
+        logging.error(f"Erro ao controlar o serviço: {e}")
+        flash(f"Erro: {str(e)}")
     return redirect(url_for('dashboard'))
 
 if __name__ == '__main__':

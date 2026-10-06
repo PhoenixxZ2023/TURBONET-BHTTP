@@ -1,0 +1,1953 @@
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;700;900&family=Rajdhani:wght@500;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-primary: #121212;
+            --bg-secondary: #1e1e1e;
+            --bg-tertiary: #2a2a2a;
+            --text-primary: #e0e0e0;
+            --text-secondary: #8b8b9e;
+            --text-muted: #5a5a6e;
+            --border-color: #333;
+            --accent-green: #00c853;
+            --accent-green-light: #00e676;
+            --accent-cyan: #00bcd4;
+            --accent-yellow: #ffc107;
+            --accent-red: #ff5252;
+            --card-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            --font-main: 'Segoe UI', system-ui, sans-serif;
+        }
+        
+        [data-theme="light"] {
+            --bg-primary: #f5f5f7;
+            --bg-secondary: #ffffff;
+            --bg-tertiary: #e8e8ed;
+            --text-primary: #1d1d1f;
+            --text-secondary: #515154;
+            --text-muted: #86868b;
+            --border-color: #d2d2d7;
+            --card-shadow: 0 2px 12px rgba(0,0,0,0.08);
+        }
+        
+        /* ═══ TEMA PAPEL / NATURAL ═══ */
+        [data-theme="paper"] {
+            --bg-primary: #f5f0e8;
+            --bg-secondary: #faf7f2;
+            --bg-tertiary: #ebe5d9;
+            --text-primary: #2c2c2c;
+            --text-secondary: #6b6b6b;
+            --text-muted: #9a9a9a;
+            --border-color: #d9d2c4;
+            --accent-green: #5a7247;
+            --accent-green-light: #7a8f65;
+            --accent-cyan: #6b8cae;
+            --accent-yellow: #b8935a;
+            --accent-red: #a85a5a;
+            --card-shadow: 0 2px 8px rgba(0,0,0,0.06);
+            --font-main: 'Georgia', 'Segoe UI', serif;
+        }
+        
+        [data-theme="paper"] body {
+            background-color: var(--bg-primary);
+        }
+        
+        [data-theme="paper"] .navbar {
+            background-color: var(--bg-secondary) !important;
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        [data-theme="paper"] .navbar-brand {
+            color: var(--text-primary) !important;
+            font-family: 'Georgia', serif;
+        }
+        
+        [data-theme="paper"] .card, [data-theme="paper"] .monitor-widget {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            box-shadow: var(--card-shadow);
+        }
+        
+        [data-theme="paper"] .card:hover, [data-theme="paper"] .monitor-widget:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+        }
+        
+        [data-theme="paper"] .modal-content {
+            background-color: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+        }
+        
+        [data-theme="paper"] .modal-header {
+            background: linear-gradient(135deg, rgba(90, 114, 71, 0.08), transparent);
+            border-bottom: 1px solid var(--border-color);
+        }
+        
+        [data-theme="paper"] .modal-title {
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .modal-body .form-control {
+            background-color: var(--bg-primary);
+            border: 1px solid var(--border-color);
+            color: var(--text-primary);
+        }
+        
+        [data-theme="paper"] .modal-body .form-control:focus {
+            border-color: var(--accent-green);
+            box-shadow: 0 0 0 3px rgba(90, 114, 71, 0.15);
+        }
+        
+        [data-theme="paper"] .modal-body label {
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .btn-close-white {
+            filter: none;
+        }
+        
+        [data-theme="paper"] .nav-btn {
+            border-color: var(--border-color);
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .nav-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--accent-green);
+            border-color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .nav-btn.active {
+            background: var(--accent-green);
+            color: #fff;
+        }
+        
+        [data-theme="paper"] .theme-dropdown {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+        }
+        
+        [data-theme="paper"] .theme-option {
+            color: var(--text-primary);
+        }
+        
+        [data-theme="paper"] .theme-option span {
+            color: var(--text-primary) !important;
+        }
+        
+        [data-theme="paper"] .theme-option:hover {
+            background: var(--bg-tertiary);
+        }
+        
+        [data-theme="paper"] .theme-option.active {
+            background: rgba(90, 114, 71, 0.15);
+        }
+        
+        [data-theme="paper"] .theme-option.active span {
+            color: var(--accent-green) !important;
+        }
+        
+        [data-theme="paper"] .theme-option.active i {
+            color: var(--accent-green) !important;
+        }
+        
+        [data-theme="paper"] .theme-option i {
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .version-pill.updated {
+            background: rgba(90, 114, 71, 0.1);
+            border-color: rgba(90, 114, 71, 0.3);
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .version-pill.updated i {
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .version-pill.updated strong {
+            color: var(--text-primary);
+        }
+        
+        [data-theme="paper"] .version-pill.has-update {
+            background: linear-gradient(135deg, rgba(90, 114, 71, 0.12), rgba(184, 147, 90, 0.08));
+            border-color: rgba(90, 114, 71, 0.4);
+        }
+        
+        [data-theme="paper"] .version-pill.has-update i {
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .version-pill.has-update .version-badge {
+            background: rgba(90, 114, 71, 0.2);
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .version-pill.has-update .changelog-tooltip {
+            background: var(--bg-secondary);
+            border-color: var(--border-color);
+            color: var(--text-primary);
+        }
+        
+        [data-theme="paper"] .changelog-tooltip-title {
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .btn-update-compact {
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-green-light));
+            box-shadow: 0 2px 8px rgba(90, 114, 71, 0.3);
+        }
+        
+        [data-theme="paper"] .btn-update-compact:hover:not(:disabled) {
+            box-shadow: 0 4px 12px rgba(90, 114, 71, 0.4);
+        }
+        
+        [data-theme="paper"] .auto-refresh-indicator {
+            background: rgba(90, 114, 71, 0.1);
+            border-color: rgba(90, 114, 71, 0.3);
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .auto-refresh-indicator .dot {
+            background: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .toast-notification {
+            background: var(--bg-secondary);
+            border-color: var(--border-color);
+        }
+        
+        [data-theme="paper"] .toast-title {
+            color: var(--text-primary);
+        }
+        
+        [data-theme="paper"] .toast-message {
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .monitor-icon.cpu {
+            background: rgba(90, 114, 71, 0.15);
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .monitor-icon.ram {
+            background: rgba(107, 140, 174, 0.15);
+            color: var(--accent-cyan);
+        }
+        
+        [data-theme="paper"] .monitor-icon.disk {
+            background: rgba(184, 147, 90, 0.15);
+            color: var(--accent-yellow);
+        }
+        
+        [data-theme="paper"] .monitor-value {
+            color: var(--text-primary);
+        }
+        
+        [data-theme="paper"] .monitor-value span {
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .progress-bar-container {
+            background: var(--bg-tertiary);
+        }
+        
+        [data-theme="paper"] .progress-bar-fill.success {
+            background: linear-gradient(90deg, #5a7247, #7a8f65);
+        }
+        
+        [data-theme="paper"] .progress-bar-fill.warning {
+            background: linear-gradient(90deg, #b8935a, #c9a66b);
+        }
+        
+        [data-theme="paper"] .progress-bar-fill.danger {
+            background: linear-gradient(90deg, #a85a5a, #b86a6a);
+        }
+        
+        [data-theme="paper"] .progress-bar-fill.secondary {
+            background: linear-gradient(90deg, #9a9a9a, #b0b0b0);
+        }
+        
+        [data-theme="paper"] .monitor-details {
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .table-theme {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+        
+        [data-theme="paper"] .table-theme thead th {
+            background-color: var(--bg-tertiary);
+            color: var(--text-primary);
+            border-bottom: 2px solid var(--border-color);
+        }
+        
+        [data-theme="paper"] .table-theme tbody td {
+            background-color: var(--bg-secondary);
+            color: var(--text-primary);
+            border-color: var(--border-color);
+        }
+        
+        [data-theme="paper"] .table-theme tbody tr:hover td {
+            background-color: var(--bg-tertiary);
+        }
+        
+        [data-theme="paper"] .update-modal-overlay {
+            background: rgba(245, 240, 232, 0.9);
+        }
+        
+        [data-theme="paper"] .update-modal-box {
+            background: var(--bg-secondary);
+            border-color: var(--border-color);
+        }
+        
+        [data-theme="paper"] .update-modal-title {
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .update-modal-subtitle {
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .update-step {
+            background: rgba(0, 0, 0, 0.03);
+        }
+        
+        [data-theme="paper"] .update-step-text {
+            color: var(--text-primary);
+        }
+        
+        [data-theme="paper"] .update-step-status {
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .update-step-icon {
+            background: rgba(0, 0, 0, 0.05);
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="paper"] .update-step.active {
+            background: rgba(90, 114, 71, 0.1);
+            border-left-color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .update-step.active .update-step-icon {
+            background: var(--accent-green);
+            color: #fff;
+        }
+        
+        [data-theme="paper"] .update-step.success {
+            background: rgba(90, 114, 71, 0.1);
+        }
+        
+        [data-theme="paper"] .update-step.success .update-step-icon {
+            background: var(--accent-green);
+            color: #fff;
+        }
+        
+        [data-theme="paper"] .update-step.error {
+            background: rgba(168, 90, 90, 0.1);
+            border-left-color: var(--accent-red);
+        }
+        
+        [data-theme="paper"] .update-step.error .update-step-icon {
+            background: var(--accent-red);
+            color: #fff;
+        }
+        
+        [data-theme="paper"] .update-success-icon {
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-green-light));
+        }
+        
+        [data-theme="paper"] footer {
+            border-top-color: var(--border-color);
+            color: var(--text-muted);
+        }
+        
+        [data-theme="paper"] footer a {
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .btn-add-user {
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-green-light));
+        }
+        
+        [data-theme="paper"] .service-icon.icon-bhttp {
+            background: rgba(90, 114, 71, 0.15);
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .service-icon.icon-hcr {
+            background: rgba(107, 140, 174, 0.15);
+            color: var(--accent-cyan);
+        }
+        
+        [data-theme="paper"] .service-icon.icon-udpgw {
+            background: rgba(184, 147, 90, 0.15);
+            color: var(--accent-yellow);
+        }
+        
+        [data-theme="paper"] .status-indicator.online {
+            background-color: var(--accent-green);
+            box-shadow: 0 0 8px rgba(90, 114, 71, 0.5);
+        }
+        
+        [data-theme="paper"] .status-indicator.offline {
+            background-color: var(--accent-red);
+            box-shadow: 0 0 8px rgba(168, 90, 90, 0.5);
+        }
+        
+        [data-theme="paper"] .status-text.online {
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .status-text.offline {
+            color: var(--accent-red);
+        }
+        
+        [data-theme="paper"] .alert-success {
+            background-color: rgba(90, 114, 71, 0.1);
+            border-color: rgba(90, 114, 71, 0.3);
+            color: var(--accent-green);
+        }
+        
+        [data-theme="paper"] .alert-warning {
+            background-color: rgba(184, 147, 90, 0.1);
+            border-color: rgba(184, 147, 90, 0.3);
+            color: var(--accent-yellow);
+        }
+        
+        [data-theme="gaming"] {
+            --bg-primary: #0a0014;
+            --bg-secondary: #1a0033;
+            --bg-tertiary: #2d0052;
+            --text-primary: #00ffff;
+            --text-secondary: #ff00ff;
+            --text-muted: #9d00ff;
+            --border-color: #ff00ff;
+            --accent-green: #39ff14;
+            --accent-green-light: #00ff41;
+            --accent-cyan: #00ffff;
+            --accent-yellow: #ffff00;
+            --accent-red: #ff003c;
+            --card-shadow: 0 0 20px rgba(255, 0, 255, 0.3);
+            --font-main: 'Rajdhani', 'Orbitron', sans-serif;
+        }
+        
+        body { 
+            background-color: var(--bg-primary); 
+            color: var(--text-primary);
+            font-family: var(--font-main);
+            transition: background-color 0.4s ease, color 0.4s ease;
+        }
+        
+        [data-theme="gaming"] body {
+            background-image: 
+                linear-gradient(45deg, rgba(255,0,255,0.03) 25%, transparent 25%),
+                linear-gradient(-45deg, rgba(0,255,255,0.03) 25%, transparent 25%),
+                linear-gradient(45deg, transparent 75%, rgba(57,255,20,0.03) 75%),
+                linear-gradient(-45deg, transparent 75%, rgba(255,255,0,0.03) 75%);
+            background-size: 40px 40px;
+            animation: gamingBg 20s linear infinite;
+        }
+        @keyframes gamingBg {
+            0% { background-position: 0 0, 0 20px, 20px -20px, -20px 0px; }
+            100% { background-position: 40px 40px, 40px 60px, 60px 20px, 20px 40px; }
+        }
+        [data-theme="gaming"] .navbar {
+            background: linear-gradient(90deg, #1a0033, #2d0052, #1a0033) !important;
+            border-bottom: 2px solid #ff00ff !important;
+            box-shadow: 0 0 20px rgba(255, 0, 255, 0.5);
+        }
+        [data-theme="gaming"] .navbar-brand {
+            font-family: 'Orbitron', sans-serif;
+            font-weight: 900;
+            text-shadow: 0 0 10px #00ffff;
+            color: #00ffff !important;
+            letter-spacing: 2px;
+        }
+        [data-theme="gaming"] .card {
+            background: linear-gradient(135deg, rgba(26, 0, 51, 0.9), rgba(45, 0, 82, 0.9));
+            border: 2px solid transparent;
+            position: relative;
+            box-shadow: 0 0 15px rgba(255, 0, 255, 0.3);
+        }
+        [data-theme="gaming"] .card::before {
+            content: '';
+            position: absolute;
+            top: -2px; left: -2px; right: -2px; bottom: -2px;
+            background: linear-gradient(45deg, #ff00ff, #00ffff, #39ff14, #ffff00, #ff00ff);
+            background-size: 400% 400%;
+            border-radius: 15px;
+            z-index: -1;
+            animation: gamingBorder 4s ease infinite;
+        }
+        @keyframes gamingBorder {
+            0%, 100% { background-position: 0% 50%; }
+            50% { background-position: 100% 50%; }
+        }
+        [data-theme="gaming"] .card:hover {
+            transform: translateY(-5px) scale(1.02);
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.6);
+        }
+        [data-theme="gaming"] .card-title,
+        [data-theme="gaming"] .section-title {
+            font-family: 'Orbitron', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-shadow: 0 0 10px currentColor;
+        }
+        [data-theme="gaming"] .badge { font-family: 'Orbitron', sans-serif; text-shadow: 0 0 5px currentColor; }
+        [data-theme="gaming"] .btn { font-family: 'Rajdhani', sans-serif; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; }
+        [data-theme="gaming"] .status-indicator.online { box-shadow: 0 0 15px #39ff14, 0 0 30px #39ff14; }
+        [data-theme="gaming"] .status-indicator.offline { box-shadow: 0 0 15px #ff003c, 0 0 30px #ff003c; }
+        [data-theme="gaming"] .version-pill.has-update {
+            background: linear-gradient(90deg, rgba(255,0,255,0.2), rgba(0,255,255,0.2));
+            border-color: #00ffff;
+            box-shadow: 0 0 15px rgba(0, 255, 255, 0.5);
+        }
+        [data-theme="gaming"] .btn-update-compact {
+            background: linear-gradient(90deg, #ff00ff, #00ffff);
+            box-shadow: 0 0 15px rgba(255, 0, 255, 0.6);
+            font-family: 'Orbitron', sans-serif;
+        }
+        [data-theme="gaming"] footer { border-top: 2px solid #ff00ff !important; }
+        [data-theme="gaming"] .modal-content {
+            background: linear-gradient(135deg, #1a0033, #2d0052);
+            border: 2px solid #ff00ff;
+        }
+        [data-theme="gaming"] .modal-title {
+            font-family: 'Orbitron', sans-serif;
+            color: #00ffff;
+            text-shadow: 0 0 10px #00ffff;
+        }
+        [data-theme="gaming"] .table { color: #00ffff; }
+        [data-theme="gaming"] .table-hover tbody tr:hover { background: rgba(255, 0, 255, 0.1); }
+        
+        .card { 
+            background-color: var(--bg-secondary); 
+            border: 1px solid var(--border-color); 
+            transition: all 0.3s ease; 
+            box-shadow: var(--card-shadow);
+        }
+        .card:hover { transform: translateY(-2px); }
+        .text-success { color: var(--accent-green) !important; }
+        .text-info { color: var(--accent-cyan) !important; }
+        .text-warning { color: var(--accent-yellow) !important; }
+        
+        .btn-add-user { 
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-green-light)); 
+            border: none; color: #fff; font-weight: 600; 
+            padding: 10px 18px; border-radius: 10px; 
+            transition: all 0.3s ease; font-size: 14px; 
+        }
+        .btn-add-user:hover { transform: translateY(-2px); box-shadow: 0 8px 20px rgba(0, 200, 83, 0.4); color: #fff; }
+        
+        .modal-content { 
+            background-color: var(--bg-secondary); 
+            border: 1px solid var(--border-color); 
+            border-radius: 15px; 
+        }
+        .modal-header { 
+            border-bottom: 1px solid var(--border-color);
+            background: linear-gradient(135deg, rgba(0, 200, 83, 0.1), transparent); 
+            border-radius: 15px 15px 0 0; 
+        }
+        .modal-title { color: var(--accent-green); font-weight: 600; }
+        .modal-body .form-control { 
+            background-color: var(--bg-primary); 
+            border: 1px solid var(--border-color); 
+            color: var(--text-primary); 
+            border-radius: 8px; 
+        }
+        .modal-body .form-control:focus { 
+            border-color: var(--accent-green); 
+            box-shadow: 0 0 0 3px rgba(0, 200, 83, 0.2); 
+        }
+        .modal-body label { color: var(--text-secondary); font-size: 13px; font-weight: 500; }
+        .btn-close-white { filter: invert(1); }
+        
+        .service-icon { 
+            width: 40px; height: 40px; border-radius: 10px;
+            display: inline-flex; align-items: center; justify-content: center; 
+            margin-right: 10px; font-size: 20px; 
+        }
+        .icon-bhttp { background: rgba(0, 200, 83, 0.15); color: var(--accent-green); }
+        .icon-hcr { background: rgba(0, 188, 212, 0.15); color: var(--accent-cyan); }
+        .icon-udpgw { background: rgba(255, 193, 7, 0.15); color: var(--accent-yellow); }
+        
+        .status-indicator { 
+            display: inline-block; width: 12px; height: 12px; 
+            border-radius: 50%; margin-left: 8px; 
+        }
+        .status-indicator.online { background-color: var(--accent-green); animation: pulse-green 2s infinite; }
+        .status-indicator.offline { background-color: var(--accent-red); animation: pulse-red 2s infinite; }
+        @keyframes pulse-green { 
+            0%, 100% { box-shadow: 0 0 10px rgba(0, 200, 83, 0.6); } 
+            50% { box-shadow: 0 0 20px rgba(0, 200, 83, 0.9); } 
+        }
+        @keyframes pulse-red { 
+            0%, 100% { box-shadow: 0 0 10px rgba(255, 82, 82, 0.6); } 
+            50% { box-shadow: 0 0 20px rgba(255, 82, 82, 0.9); } 
+        }
+        .status-text { font-size: 11px; font-weight: 600; margin-left: 5px; text-transform: uppercase; }
+        .status-text.online { color: var(--accent-green); }
+        .status-text.offline { color: var(--accent-red); }
+        
+        .navbar {
+            background-color: var(--bg-secondary) !important;
+            border-bottom: 1px solid var(--border-color);
+        }
+        .navbar-brand { color: var(--text-primary) !important; font-weight: 700; }
+        .nav-controls { display: flex; align-items: center; gap: 8px; }
+        .nav-btn {
+            background: transparent;
+            border: 1px solid var(--border-color);
+            color: var(--text-secondary);
+            width: 36px; height: 36px;
+            border-radius: 8px;
+            display: inline-flex; align-items: center; justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            position: relative;
+            text-decoration: none;
+        }
+        .nav-btn:hover {
+            background: var(--bg-tertiary);
+            color: var(--accent-green);
+            border-color: var(--accent-green);
+        }
+        .nav-btn.active {
+            background: var(--accent-green);
+            color: #fff;
+            border-color: var(--accent-green);
+        }
+        
+        .theme-dropdown {
+            position: absolute;
+            top: calc(100% + 8px);
+            right: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 8px;
+            min-width: 180px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: none;
+            z-index: 1000;
+        }
+        .theme-dropdown.show { display: block; animation: fadeIn 0.2s ease; }
+        .theme-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 13px;
+            font-weight: 500;
+            transition: all 0.2s ease;
+            color: #e0e0e0;
+        }
+        .theme-option span { color: #e0e0e0 !important; }
+        .theme-option:hover { background: rgba(255, 255, 255, 0.08); }
+        .theme-option:hover span { color: #ffffff !important; }
+        .theme-option.active { background: rgba(0, 200, 83, 0.2); }
+        .theme-option.active span { color: #00c853 !important; font-weight: 600; }
+        .theme-option.active i { color: #00c853 !important; }
+        .theme-option i { font-size: 16px; color: #8b8b9e; }
+        
+        [data-theme="light"] .theme-option { color: #1d1d1f; }
+        [data-theme="light"] .theme-option span { color: #1d1d1f !important; }
+        [data-theme="light"] .theme-option:hover { background: rgba(0, 0, 0, 0.05); }
+        [data-theme="light"] .theme-option:hover span { color: #000000 !important; }
+        [data-theme="light"] .theme-option i { color: #515154; }
+        
+        [data-theme="gaming"] .theme-option {
+            color: #00ffff;
+            font-family: 'Rajdhani', sans-serif;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        [data-theme="gaming"] .theme-option span {
+            color: #00ffff !important;
+            text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+        }
+        [data-theme="gaming"] .theme-option:hover { background: rgba(255, 0, 255, 0.15); }
+        [data-theme="gaming"] .theme-option:hover span {
+            color: #ff00ff !important;
+            text-shadow: 0 0 10px rgba(255, 0, 255, 0.8);
+        }
+        [data-theme="gaming"] .theme-option.active span {
+            color: #39ff14 !important;
+            text-shadow: 0 0 10px rgba(57, 255, 20, 0.8);
+        }
+        [data-theme="gaming"] .theme-option.active {
+            background: rgba(57, 255, 20, 0.15);
+            border: 1px solid rgba(57, 255, 20, 0.3);
+        }
+        [data-theme="gaming"] .theme-option i {
+            color: #ff00ff;
+            text-shadow: 0 0 5px rgba(255, 0, 255, 0.5);
+        }
+        
+        .version-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 6px 14px;
+            border-radius: 20px;
+            font-size: 12px;
+            font-weight: 500;
+            margin-bottom: 15px;
+            animation: fadeIn 0.4s ease-out;
+        }
+        @keyframes fadeIn { 
+            from { opacity: 0; transform: translateY(-10px); } 
+            to { opacity: 1; transform: translateY(0); } 
+        }
+        .version-pill.updated {
+            background: rgba(0, 200, 83, 0.08);
+            border: 1px solid rgba(0, 200, 83, 0.2);
+            color: var(--text-secondary);
+        }
+        .version-pill.updated i { color: var(--accent-green); font-size: 14px; }
+        .version-pill.updated strong { color: var(--text-primary); }
+        .version-pill.has-update {
+            background: linear-gradient(135deg, rgba(0, 200, 83, 0.15), rgba(0, 230, 118, 0.05));
+            border: 1px solid rgba(0, 200, 83, 0.4);
+            color: var(--text-primary);
+            position: relative;
+            cursor: help;
+        }
+        .version-pill.has-update i { color: var(--accent-green); font-size: 14px; }
+        .version-pill.has-update .version-badge {
+            background: rgba(0, 200, 83, 0.25);
+            color: var(--accent-green);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .version-pill.has-update .changelog-tooltip {
+            position: absolute;
+            bottom: calc(100% + 8px);
+            left: 0;
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 10px 14px;
+            min-width: 250px;
+            max-width: 300px;
+            font-size: 12px;
+            color: var(--text-primary);
+            opacity: 0;
+            visibility: hidden;
+            transform: translateY(5px);
+            transition: all 0.2s ease;
+            z-index: 100;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        .version-pill.has-update .changelog-tooltip::after {
+            content: '';
+            position: absolute;
+            top: 100%;
+            left: 20px;
+            border: 6px solid transparent;
+            border-top-color: var(--border-color);
+        }
+        .version-pill.has-update:hover .changelog-tooltip {
+            opacity: 1;
+            visibility: visible;
+            transform: translateY(0);
+        }
+        .changelog-tooltip-title {
+            color: var(--accent-green);
+            font-weight: 600;
+            margin-bottom: 5px;
+            font-size: 12px;
+        }
+        
+        .section-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        .section-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin: 0;
+        }
+        .section-controls { display: flex; align-items: center; gap: 8px; }
+        .btn-update-compact {
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-green-light));
+            border: none;
+            color: #fff;
+            font-weight: 600;
+            padding: 6px 14px;
+            border-radius: 8px;
+            font-size: 12px;
+            transition: all 0.3s ease;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            animation: pulse-btn 2s ease-in-out infinite;
+        }
+        @keyframes pulse-btn {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(0, 200, 83, 0.4); }
+            50% { box-shadow: 0 0 0 6px rgba(0, 200, 83, 0); }
+        }
+        .btn-update-compact:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 15px rgba(0, 200, 83, 0.4);
+            color: #fff;
+        }
+        .btn-update-compact:disabled { opacity: 0.7; cursor: not-allowed; animation: none; }
+        .btn-update-compact .spinner-border { width: 12px; height: 12px; border-width: 2px; }
+        
+        .auto-refresh-indicator {
+            display: inline-flex;
+            align-items: center;
+            gap: 5px;
+            padding: 4px 10px;
+            border-radius: 12px;
+            font-size: 11px;
+            background: rgba(0, 200, 83, 0.1);
+            border: 1px solid rgba(0, 200, 83, 0.3);
+            color: var(--accent-green);
+        }
+        .auto-refresh-indicator .dot {
+            width: 6px; height: 6px;
+            border-radius: 50%;
+            background: var(--accent-green);
+            animation: blink 1s infinite;
+        }
+        @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+        
+        .toast-container {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-width: 350px;
+        }
+        .toast-notification {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 10px;
+            padding: 12px 16px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            animation: slideInRight 0.4s ease-out;
+            min-width: 280px;
+            position: relative;
+            overflow: hidden;
+        }
+        @keyframes slideInRight {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .toast-notification.removing { animation: slideOutRight 0.3s ease-in forwards; }
+        @keyframes slideOutRight { to { transform: translateX(400px); opacity: 0; } }
+        .toast-notification::before {
+            content: '';
+            position: absolute;
+            left: 0; top: 0; bottom: 0;
+            width: 4px;
+        }
+        .toast-notification.success::before { background: var(--accent-green); }
+        .toast-notification.error::before { background: var(--accent-red); }
+        .toast-notification.warning::before { background: var(--accent-yellow); }
+        .toast-notification.info::before { background: var(--accent-cyan); }
+        .toast-icon {
+            width: 32px; height: 32px;
+            border-radius: 8px;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+        }
+        .toast-notification.success .toast-icon { background: rgba(0, 200, 83, 0.15); color: var(--accent-green); }
+        .toast-notification.error .toast-icon { background: rgba(255, 82, 82, 0.15); color: var(--accent-red); }
+        .toast-notification.warning .toast-icon { background: rgba(255, 193, 7, 0.15); color: var(--accent-yellow); }
+        .toast-notification.info .toast-icon { background: rgba(0, 188, 212, 0.15); color: var(--accent-cyan); }
+        .toast-content { flex: 1; }
+        .toast-title { font-weight: 600; font-size: 13px; color: var(--text-primary); margin-bottom: 2px; }
+        .toast-message { font-size: 12px; color: var(--text-secondary); }
+        .toast-close {
+            background: transparent;
+            border: none;
+            color: var(--text-muted);
+            cursor: pointer;
+            padding: 4px;
+            font-size: 14px;
+        }
+        .toast-close:hover { color: var(--text-primary); }
+        .toast-progress {
+            position: absolute;
+            bottom: 0; left: 0;
+            height: 2px;
+            background: var(--accent-green);
+            animation: progressShrink 4s linear forwards;
+        }
+        @keyframes progressShrink { from { width: 100%; } to { width: 0%; } }
+        
+        .update-modal-overlay {
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: rgba(0, 0, 0, 0.85);
+            backdrop-filter: blur(8px);
+            display: none;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+        }
+        .update-modal-overlay.active { display: flex; animation: fadeIn 0.3s ease-out; }
+        .update-modal-box {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 450px;
+            width: 90%;
+            text-align: center;
+            box-shadow: 0 25px 50px rgba(0, 0, 0, 0.5);
+            animation: scaleIn 0.4s ease-out;
+        }
+        @keyframes scaleIn { 
+            from { opacity: 0; transform: scale(0.9); } 
+            to { opacity: 1; transform: scale(1); } 
+        }
+        .update-spinner {
+            width: 70px; height: 70px;
+            border: 4px solid rgba(0, 200, 83, 0.1);
+            border-top: 4px solid var(--accent-green);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        .update-modal-title { color: var(--accent-green); font-size: 20px; font-weight: 700; margin-bottom: 8px; }
+        .update-modal-subtitle { color: var(--text-secondary); font-size: 13px; margin-bottom: 20px; }
+        .update-steps { text-align: left; margin-top: 15px; }
+        .update-step {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 12px;
+            margin-bottom: 6px;
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            font-size: 13px;
+        }
+        .update-step.active { background: rgba(0, 200, 83, 0.1); border-left: 3px solid var(--accent-green); }
+        .update-step.success { background: rgba(0, 200, 83, 0.1); }
+        .update-step.error { background: rgba(255, 82, 82, 0.1); border-left: 3px solid var(--accent-red); }
+        .update-step-icon {
+            width: 22px; height: 22px;
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 11px; flex-shrink: 0;
+            background: rgba(255, 255, 255, 0.05);
+            color: var(--text-secondary);
+        }
+        .update-step.active .update-step-icon { background: var(--accent-green); color: #fff; }
+        .update-step.success .update-step-icon { background: var(--accent-green); color: #fff; }
+        .update-step.error .update-step-icon { background: var(--accent-red); color: #fff; }
+        .update-step-text { color: var(--text-primary); flex: 1; }
+        .update-step-status { font-size: 11px; color: var(--text-secondary); }
+        .update-success-icon {
+            width: 90px; height: 90px;
+            margin: 0 auto 20px;
+            background: linear-gradient(135deg, var(--accent-green), var(--accent-green-light));
+            border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 45px; color: #fff;
+            animation: successPop 0.5s ease-out;
+        }
+        @keyframes successPop {
+            0% { transform: scale(0); opacity: 0; }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        
+        /* Tabla temática que responde a los temas */
+.table-theme {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+.table-theme thead th {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--border-color);
+    font-weight: 600;
+}
+.table-theme tbody td {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+.table-theme tbody tr:hover td {
+    background-color: var(--bg-tertiary);
+}
+
+/* Ajustes específicos para modo claro */
+[data-theme="light"] .table-theme {
+    background-color: #ffffff;
+    color: #1d1d1f;
+}
+[data-theme="light"] .table-theme thead th {
+    background-color: #f5f5f7;
+    color: #1d1d1f;
+    border-bottom: 2px solid #d2d2d7;
+}
+[data-theme="light"] .table-theme tbody td {
+    background-color: #ffffff;
+    color: #1d1d1f;
+    border-color: #d2d2d7;
+}
+[data-theme="light"] .table-theme tbody tr:hover td {
+    background-color: #f5f5f7;
+}
+
+/* Ajustes específicos para modo gaming */
+[data-theme="gaming"] .table-theme {
+    background-color: rgba(26, 0, 51, 0.9);
+    color: #00ffff;
+    border-color: #ff00ff;
+}
+[data-theme="gaming"] .table-theme thead th {
+    background-color: rgba(45, 0, 82, 0.9);
+    color: #00ffff;
+    border-bottom: 2px solid #ff00ff;
+    text-shadow: 0 0 5px #00ffff;
+}
+[data-theme="gaming"] .table-theme tbody td {
+    background-color: rgba(26, 0, 51, 0.9);
+    color: #00ffff;
+    border-color: #ff00ff;
+}
+[data-theme="gaming"] .table-theme tbody tr:hover td {
+    background-color: rgba(255, 0, 255, 0.1);
+    box-shadow: inset 0 0 10px rgba(0, 255, 255, 0.2);
+}
+        footer {
+            color: var(--text-muted);
+            font-size: 12px;
+            border-top: 1px solid var(--border-color);
+        }
+        footer a { color: var(--accent-green); text-decoration: none; }
+        footer a:hover { text-decoration: underline; }
+        
+        @media (max-width: 576px) {
+            .section-header { flex-direction: column; align-items: flex-start; }
+            .section-controls { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+            .btn-update-compact { flex: 1; justify-content: center; }
+            .version-pill { font-size: 11px; padding: 5px 12px; }
+            .version-pill.has-update .changelog-tooltip { min-width: 220px; left: -10px; }
+            .toast-container { right: 10px; left: 10px; max-width: none; }
+            .toast-notification { min-width: auto; }
+        }
+        
+        /* ═══ WIDGETS DE MONITOREO ══ */
+        .monitor-widget {
+            background: var(--bg-secondary);
+            border: 1px solid var(--border-color);
+            border-radius: 12px;
+            padding: 20px;
+            transition: all 0.3s ease;
+            box-shadow: var(--card-shadow);
+        }
+        .monitor-widget:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+        .monitor-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 15px;
+        }
+        .monitor-title {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 600;
+            color: var(--text-primary);
+        }
+        .monitor-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+        }
+        .monitor-icon.cpu { background: rgba(0, 200, 83, 0.15); color: var(--accent-green); }
+        .monitor-icon.ram { background: rgba(0, 188, 212, 0.15); color: var(--accent-cyan); }
+        .monitor-icon.disk { background: rgba(255, 193, 7, 0.15); color: var(--accent-yellow); }
+        
+        .monitor-value {
+            font-size: 28px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin-bottom: 5px;
+        }
+        .monitor-value span {
+            font-size: 14px;
+            color: var(--text-secondary);
+            font-weight: 400;
+        }
+        
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background: var(--bg-tertiary);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: 10px;
+        }
+        .progress-bar-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.8s ease, background-color 0.3s ease;
+            position: relative;
+        }
+        .progress-bar-fill.success { background: linear-gradient(90deg, #00c853, #00e676); }
+        .progress-bar-fill.warning { background: linear-gradient(90deg, #ffc107, #ffca28); }
+        .progress-bar-fill.danger { background: linear-gradient(90deg, #ff5252, #ff1744); }
+        .progress-bar-fill.secondary { background: linear-gradient(90deg, #8b8b9e, #5a5a6e); }
+        
+        .monitor-details {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 8px;
+            font-size: 11px;
+            color: var(--text-secondary);
+        }
+        
+        [data-theme="gaming"] .monitor-widget {
+            background: linear-gradient(135deg, rgba(26, 0, 51, 0.9), rgba(45, 0, 82, 0.9));
+            border: 2px solid transparent;
+            position: relative;
+        }
+        [data-theme="gaming"] .monitor-widget::before {
+            content: '';
+            position: absolute;
+            top: -2px; left: -2px; right: -2px; bottom: -2px;
+            background: linear-gradient(45deg, #ff00ff, #00ffff, #39ff14, #ffff00, #ff00ff);
+            background-size: 400% 400%;
+            border-radius: 12px;
+            z-index: -1;
+            animation: gamingBorder 4s ease infinite;
+        }
+        [data-theme="gaming"] .monitor-value {
+            text-shadow: 0 0 10px currentColor;
+        }
+        [data-theme="gaming"] .progress-bar-fill.success { box-shadow: 0 0 10px #39ff14; }
+        [data-theme="gaming"] .progress-bar-fill.warning { box-shadow: 0 0 10px #ffff00; }
+        [data-theme="gaming"] .progress-bar-fill.danger { box-shadow: 0 0 10px #ff003c; }
+        
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-dark sticky-top">
+        <div class="container-fluid">
+            <span class="navbar-brand mb-0 h1">
+                <i class="bi bi-hexagon-fill text-success"></i>Web Panel
+            </span>
+            <div class="nav-controls">
+                <button class="nav-btn" id="btnAutoRefresh" onclick="toggleAutoRefresh()" title="Auto-refresh">
+                    <i class="bi bi-arrow-repeat"></i>
+                </button>
+                <div style="position: relative;">
+                    <button class="nav-btn" id="btnTheme" onclick="toggleThemeDropdown()" title="Cambiar tema">
+                        <i class="bi bi-palette-fill"></i>
+                    </button>
+                 <div class="theme-dropdown" id="themeDropdown">
+    <div class="theme-option" data-theme="dark" onclick="setTheme('dark')">
+        <i class="bi bi-moon-fill"></i>
+        <span>Modo Oscuro</span>
+    </div>
+    <div class="theme-option" data-theme="light" onclick="setTheme('light')">
+        <i class="bi bi-sun-fill"></i>
+        <span>Modo Claro</span>
+    </div>
+    <div class="theme-option" data-theme="paper" onclick="setTheme('paper')">
+        <i class="bi bi-house"></i>
+        <span>Modo Privado </span>
+    </div>
+    <div class="theme-option" data-theme="gaming" onclick="setTheme('gaming')">
+        <i class="bi bi-controller"></i>
+        <span>Modo Gaming</span>
+    </div>
+</div>
+</div>
+                <button class="nav-btn" onclick="openPasswordModal()" title="Cambiar contraseña">
+                    <i class="bi bi-key-fill"></i>
+                </button>
+                <a href="/logout" class="nav-btn" title="Cerrar sesión">
+                    <i class="bi bi-box-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </nav>
+    
+    <div class="toast-container" id="toastContainer"></div>
+    
+    <div class="container mt-3 mt-md-4">
+        {% with messages = get_flashed_messages() %}{% if messages %}{% for msg in messages %}
+            <div class="alert alert-{% if 'error' in msg.lower() or '⚠' in msg %}warning{% else %}success{% endif %} alert-dismissible fade show" role="alert">
+                {{ msg }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+        {% endfor %}{% endif %}{% endwith %}
+        
+        {% if stats.update_info.has_update %}
+        <div class="version-pill has-update">
+            <i class="bi bi-stars"></i>
+            <span>Nueva versión:</span>
+            <span class="version-badge">v{{ stats.update_info.remote_version }}</span>
+            <span style="color: var(--text-secondary);">·</span>
+            <span style="color: var(--text-secondary);">Actual: v{{ stats.update_info.local_version }}</span>
+            {% if stats.update_info.changelog %}
+            <div class="changelog-tooltip">
+                <div class="changelog-tooltip-title"><i class="bi bi-card-list"></i> Novedades</div>
+                {{ stats.update_info.changelog }}
+            </div>
+            {% endif %}
+        </div>
+        {% elif not stats.update_info.error %}
+        <div class="version-pill updated">
+            <i class="bi bi-patch-check-fill"></i>
+            <span>Sistema actualizado  •  <strong>v{{ stats.update_info.local_version }}</strong></span>
+        </div>
+        {% endif %}
+        
+        <!-- ═══ WIDGETS DE MONITOREO DEL SISTEMA ═══ -->
+        <div class="row g-3 mb-4">
+            <!-- CPU -->
+            <div class="col-12 col-md-4">
+                <div class="monitor-widget">
+                    <div class="monitor-header">
+                        <div class="monitor-title">
+                            <div class="monitor-icon cpu">
+                                <i class="bi bi-cpu-fill"></i>
+                            </div>
+                            <span>CPU</span>
+                        </div>
+                        <span class="badge bg-{{ stats.system_stats.cpu.color }}">{{ stats.system_stats.cpu.cores }} cores</span>
+                    </div>
+                    <div class="monitor-value">
+                        {{ stats.system_stats.cpu.percent }}%
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill {{ stats.system_stats.cpu.color }}" 
+                             style="width: {{ stats.system_stats.cpu.percent }}%"></div>
+                    </div>
+                    <div class="monitor-details">
+                        <span>Uso del procesador</span>
+                        <span>{{ stats.system_stats.cpu.cores }} núcleos</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- RAM -->
+            <div class="col-12 col-md-4">
+                <div class="monitor-widget">
+                    <div class="monitor-header">
+                        <div class="monitor-title">
+                            <div class="monitor-icon ram">
+                                <i class="bi bi-memory"></i>
+                            </div>
+                            <span>RAM</span>
+                        </div>
+                        <span class="badge bg-{{ stats.system_stats.ram.color }}">{{ stats.system_stats.ram.used_gb }} GB</span>
+                    </div>
+                    <div class="monitor-value">
+                        {{ stats.system_stats.ram.percent }}%
+                        <span>/ {{ stats.system_stats.ram.total_gb }} GB</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill {{ stats.system_stats.ram.color }}" 
+                             style="width: {{ stats.system_stats.ram.percent }}%"></div>
+                    </div>
+                    <div class="monitor-details">
+                        <span>{{ stats.system_stats.ram.used_gb }} GB usados</span>
+                        <span>{{ stats.system_stats.ram.total_gb }} GB total</span>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- Disco -->
+            <div class="col-12 col-md-4">
+                <div class="monitor-widget">
+                    <div class="monitor-header">
+                        <div class="monitor-title">
+                            <div class="monitor-icon disk">
+                                <i class="bi bi-hdd-fill"></i>
+                            </div>
+                            <span>Disco</span>
+                        </div>
+                        <span class="badge bg-{{ stats.system_stats.disk.color }}">{{ stats.system_stats.disk.used_gb }} GB</span>
+                    </div>
+                    <div class="monitor-value">
+                        {{ stats.system_stats.disk.percent }}%
+                        <span>/ {{ stats.system_stats.disk.total_gb }} GB</span>
+                    </div>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill {{ stats.system_stats.disk.color }}" 
+                             style="width: {{ stats.system_stats.disk.percent }}%"></div>
+                    </div>
+                    <div class="monitor-details">
+                        <span>{{ stats.system_stats.disk.used_gb }} GB usados</span>
+                        <span>{{ stats.system_stats.disk.total_gb }} GB total</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="section-header">
+            <h5 class="section-title">
+                <i class="bi bi-hdd-network"></i> Servicios Activos
+            </h5>
+            <div class="section-controls">
+                <div id="autoRefreshIndicator" class="auto-refresh-indicator" style="display: none;">
+                    <span class="dot"></span>
+                    <span>Actualizando en <span id="refreshCountdown">30</span>s</span>
+                </div>
+                {% if stats.update_info.has_update %}
+                <button class="btn-update-compact" id="btnUpdateNow" onclick="startUpdate()">
+                    <i class="bi bi-cloud-download"></i> Actualizar Ahora
+                </button>
+                {% endif %}
+            </div>
+        </div>
+        
+        <div class="row g-3 mb-4">
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100"><div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="card-title mb-0 d-flex align-items-center">
+                            <span class="service-icon icon-bhttp"><i class="bi bi-globe"></i></span>
+                            <span class="text-success">BHTTP</span>
+                            {% if stats.bhttp_online %}
+                                <span class="status-indicator online"></span>
+                                <span class="status-text online">ONLINE</span>
+                            {% else %}
+                                <span class="status-indicator offline"></span>
+                                <span class="status-text offline">OFFLINE</span>
+                            {% endif %}
+                        </h5>
+                        <span class="badge bg-success">{{ stats.bhttp_active }}/{{ stats.bhttp_ports|length }}</span>
+                    </div>
+                    <div class="mb-3"><small class="text-muted">Puertos:</small>
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                            {% for p in stats.bhttp_ports %}<span class="badge bg-secondary">{{ p }}</span>{% else %}<span class="text-muted small">Ninguno</span>{% endfor %}
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="/control_service/bhttp/start" class="btn btn-sm btn-outline-success flex-fill" onclick="return confirm('¿Iniciar BHTTP?')"><i class="bi bi-play-fill"></i></a>
+                        <a href="/control_service/bhttp/stop" class="btn btn-sm btn-outline-warning flex-fill" onclick="return confirm('¿Detener BHTTP?')"><i class="bi bi-stop-fill"></i></a>
+                        <a href="/control_service/bhttp/restart" class="btn btn-sm btn-outline-info flex-fill" onclick="return confirm('¿Reiniciar BHTTP?')"><i class="bi bi-arrow-clockwise"></i></a>
+                    </div>
+                </div></div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100"><div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="card-title mb-0 d-flex align-items-center">
+                            <span class="service-icon icon-hcr"><i class="bi bi-shield-lock"></i></span>
+                            <span class="text-info">HCR</span>
+                            {% if stats.hcr_online %}
+                                <span class="status-indicator online"></span>
+                                <span class="status-text online">ONLINE</span>
+                            {% else %}
+                                <span class="status-indicator offline"></span>
+                                <span class="status-text offline">OFFLINE</span>
+                            {% endif %}
+                        </h5>
+                        <span class="badge bg-info text-dark">{{ stats.hcr_active }}/{{ stats.hcr_ports|length }}</span>
+                    </div>
+                    <div class="mb-3"><small class="text-muted">Puertos:</small>
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                            {% for p in stats.hcr_ports %}<span class="badge bg-secondary">{{ p }}</span>{% else %}<span class="text-muted small">Ninguno</span>{% endfor %}
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="/control_service/hcr/start" class="btn btn-sm btn-outline-success flex-fill" onclick="return confirm('¿Iniciar HCR?')"><i class="bi bi-play-fill"></i></a>
+                        <a href="/control_service/hcr/stop" class="btn btn-sm btn-outline-warning flex-fill" onclick="return confirm('¿Detener HCR?')"><i class="bi bi-stop-fill"></i></a>
+                        <a href="/control_service/hcr/restart" class="btn btn-sm btn-outline-info flex-fill" onclick="return confirm('¿Reiniciar HCR?')"><i class="bi bi-arrow-clockwise"></i></a>
+                    </div>
+                </div></div>
+            </div>
+            <div class="col-12 col-md-6 col-lg-4">
+                <div class="card h-100"><div class="card-body">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h5 class="card-title mb-0 d-flex align-items-center">
+                            <span class="service-icon icon-udpgw"><i class="bi bi-wifi"></i></span>
+                            <span class="text-warning">UDPGW</span>
+                            {% if stats.udpgw_online %}
+                                <span class="status-indicator online"></span>
+                                <span class="status-text online">ONLINE</span>
+                            {% else %}
+                                <span class="status-indicator offline"></span>
+                                <span class="status-text offline">OFFLINE</span>
+                            {% endif %}
+                        </h5>
+                        <span class="badge bg-warning text-dark">{{ stats.udpgw_active }}/{{ stats.udpgw_ports|length }}</span>
+                    </div>
+                    <div class="mb-3"><small class="text-muted">Puertos:</small>
+                        <div class="d-flex flex-wrap gap-1 mt-1">
+                            {% for p in stats.udpgw_ports %}<span class="badge bg-secondary">{{ p }}</span>{% else %}<span class="text-muted small">Ninguno</span>{% endfor %}
+                        </div>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <a href="/control_service/udpgw/start" class="btn btn-sm btn-outline-success flex-fill" onclick="return confirm('¿Iniciar UDPGW?')"><i class="bi bi-play-fill"></i></a>
+                        <a href="/control_service/udpgw/stop" class="btn btn-sm btn-outline-warning flex-fill" onclick="return confirm('¿Detener UDPGW?')"><i class="bi bi-stop-fill"></i></a>
+                        <a href="/control_service/udpgw/restart" class="btn btn-sm btn-outline-info flex-fill" onclick="return confirm('¿Reiniciar UDPGW?')"><i class="bi bi-arrow-clockwise"></i></a>
+                    </div>
+                </div></div>
+            </div>
+        </div>
+        
+        <div class="row g-3">
+            <div class="col-12">
+                <div class="card"><div class="card-body">
+                    <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 gap-2">
+                        <h5 class="card-title mb-0">
+                            <i class="bi bi-people-fill text-success"></i> Usuarios Totales
+                            <span class="badge bg-secondary ms-1">{{ stats.users }}</span>
+                        </h5>
+                        <button type="button" class="btn btn-add-user" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                            <i class="bi bi-person-plus-fill me-1"></i> Crear Usuario
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-theme table-hover table-sm align-middle mb-0">
+                            <thead><tr>
+                                <th><i class="bi bi-person-circle"></i> Usuario</th>
+                                <th><i class="bi bi-calendar-event"></i> Expiración</th>
+                                <th class="text-end"><i class="bi bi-gear"></i> Acción</th>
+                            </tr></thead>
+                            <tbody>
+                                {% for u in users %}
+                                <tr>
+                                    <td><strong>{{ u.user }}</strong></td>
+                                    <td><span class="badge bg-secondary">{{ u.exp }}</span></td>
+                                    <td class="text-end">
+                                        <div class="d-flex gap-1 justify-content-end flex-wrap">
+                                            <button class="btn btn-sm btn-outline-warning" onclick="openEditPasswordModal('{{ u.user }}')" title="Cambiar contraseña">
+                                                <i class="bi bi-key"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-info" onclick="openEditExpiryModal('{{ u.user }}', '{{ u.exp }}')" title="Cambiar expiración">
+                                                <i class="bi bi-calendar-event"></i>
+                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="if(confirm('¿Eliminar a {{ u.user }}?')) window.location.href='/delete_user/{{ u.user }}'" title="Eliminar usuario">
+            <i class="bi bi-trash"></i>
+        </button>
+                                        </div>
+                                    </td>
+                                </tr>
+                                {% else %}
+                                <tr><td colspan="3" class="text-center text-muted py-4">
+                                    <i class="bi bi-inbox" style="font-size: 2rem;"></i><br>
+                                    No hay usuarios registrados.
+                                </td></tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                </div></div>
+            </div>
+        </div>
+    </div>
+    
+    <footer class="text-center py-4 mt-5">
+        <div class="container">
+            <p class="mb-1">
+                <i class="bi bi-hexagon-fill text-success"></i>
+                <strong>Web Manager</strong> v{{ stats.update_info.local_version }}
+            </p>
+            <p class="mb-0">
+                &copy;  <a href="" target="_blank">2026</a> · Todos los derechos reservados
+            </p>
+        </div>
+    </footer>
+    
+    <!-- Modal Agregar Usuario -->
+    <div class="modal fade" id="addUserModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-person-plus-fill"></i> Nuevo Usuario</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="/add_user" method="POST">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-person"></i> Nombre de usuario</label>
+                            <input type="text" class="form-control" name="username" placeholder="ej: juan_perez" required pattern="[a-z0-9_-]+" autocomplete="off">
+                            <small class="text-muted">Solo minúsculas, números, _ y -</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-key"></i> Contraseña</label>
+                            <input type="text" class="form-control" name="password" placeholder="Contraseña segura" required autocomplete="off">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-calendar3"></i> Días de validez</label>
+                            <input type="number" class="form-control" name="days" placeholder="30" min="1" value="30" required>
+                            <small class="text-muted">El usuario expirará automáticamente</small>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Cancelar</button>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle-fill"></i> Crear </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Cambiar Contraseña Admin -->
+    <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-shield-lock-fill"></i> Cambiar Contraseña</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form action="/change_password" method="POST">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-lock-fill"></i> Contraseña actual</label>
+                            <input type="password" class="form-control" name="current_password" required autocomplete="current-password">
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-key-fill"></i> Nueva contraseña</label>
+                            <input type="password" class="form-control" name="new_password" required minlength="4" autocomplete="new-password">
+                            <small class="text-muted">Mínimo 4 caracteres</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-key-fill"></i> Confirmar nueva contraseña</label>
+                            <input type="password" class="form-control" name="confirm_password" required minlength="4" autocomplete="new-password">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Cancelar</button>
+                        <button type="submit" class="btn btn-success">
+                            <i class="bi bi-check-circle-fill"></i> Cambiar
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Cambiar Contraseña de Usuario -->
+    <div class="modal fade" id="editPasswordModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-key-fill"></i> Editar Contraseña de Usuario</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="editPasswordForm" method="POST">
+                    <div class="modal-body">
+                        <div class="alert alert-info border-0 mb-3" style="background: rgba(0, 188, 212, 0.1); color: #4dd0e1; font-size: 13px;">
+                            <i class="bi bi-person-fill me-2"></i>
+                            Usuario: <strong id="editPasswordUsername"></strong>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-key"></i> Nueva contraseña</label>
+                            <input type="password" class="form-control" name="new_password" required minlength="4" autocomplete="new-password">
+                            <small class="text-muted">Mínimo 4 caracteres</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-key"></i> Confirmar contraseña</label>
+                            <input type="password" class="form-control" name="confirm_password" required minlength="4" autocomplete="new-password">
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Cancelar</button>
+                        <button type="submit" class="btn btn-warning"><i class="bi bi-check-circle-fill"></i> Cambiar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal Cambiar Expiración de Usuario -->
+    <div class="modal fade" id="editExpiryModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title"><i class="bi bi-calendar-event-fill"></i> Editar Expiración</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="editExpiryForm" method="POST">
+                    <div class="modal-body">
+                        <div class="alert alert-info border-0 mb-3" style="background: rgba(0, 188, 212, 0.1); color: #4dd0e1; font-size: 13px;">
+                            <i class="bi bi-person-fill me-2"></i>
+                            Usuario: <strong id="editExpiryUsername"></strong>
+                            <br>
+                            <i class="bi bi-calendar3 me-2"></i>
+                            Expiración actual: <strong id="editExpiryCurrent"></strong>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-clock-history"></i> Opciones rápidas</label>
+                            <div class="d-grid gap-2">
+                                <button type="submit" name="action" value="extend_7" class="btn btn-outline-success btn-sm">
+                                    <i class="bi bi-plus-circle"></i> Extender 7 días
+                                </button>
+                                <button type="submit" name="action" value="extend_15" class="btn btn-outline-success btn-sm">
+                                    <i class="bi bi-plus-circle"></i> Extender 15 días
+                                </button>
+                                <button type="submit" name="action" value="extend_30" class="btn btn-outline-success btn-sm">
+                                    <i class="bi bi-plus-circle"></i> Extender 30 días
+                                </button>
+                                <button type="submit" name="action" value="extend_60" class="btn btn-outline-success btn-sm">
+                                    <i class="bi bi-plus-circle"></i> Extender 60 días
+                                </button>
+                                <button type="submit" name="action" value="extend_90" class="btn btn-outline-success btn-sm">
+                                    <i class="bi bi-plus-circle"></i> Extender 90 días
+                                </button>
+                            </div>
+                        </div>
+                        <hr style="border-color: var(--border-color);">
+                        <div class="mb-3">
+                            <label class="form-label"><i class="bi bi-calendar-check"></i> Fecha personalizada</label>
+                            <div class="input-group">
+                                <input type="date" class="form-control" id="customDateInput" name="custom_date">
+                                <button type="submit" name="action" value="custom" class="btn btn-outline-info btn-sm">
+                                    <i class="bi bi-check"></i> Aplicar
+                                </button>
+                            </div>
+                        </div>
+                        <hr style="border-color: var(--border-color);">
+                        <button type="submit" name="action" value="permanent" class="btn btn-outline-warning btn-sm w-100" onclick="return confirm('¿Hacer este usuario permanente?');">
+                            <i class="bi bi-infinity"></i> Quitar expiración (permanente)
+                        </button>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Cerrar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal de Actualización -->
+    <div class="update-modal-overlay" id="updateModal">
+        <div class="update-modal-box" id="updateModalBox"></div>
+    </div>
+    
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // ═══ SISTEMA DE TEMAS ═══
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            document.documentElement.setAttribute('data-bs-theme', theme === 'light' ? 'light' : 'dark');
+            localStorage.setItem('hexTheme', theme);
+            updateThemeDropdown(theme);
+            closeThemeDropdown();
+            showToast('info', 'Tema cambiado', `Modo ${theme === 'gaming' ? 'Gaming 🎮' : theme === 'light' ? 'Claro ☀️' : 'Oscuro 🌙'} activado`);
+        }
+        
+        function updateThemeDropdown(theme) {
+            document.querySelectorAll('.theme-option').forEach(opt => {
+                opt.classList.toggle('active', opt.dataset.theme === theme);
+            });
+        }
+        
+        function toggleThemeDropdown() {
+            document.getElementById('themeDropdown').classList.toggle('show');
+        }
+        
+        function closeThemeDropdown() {
+            document.getElementById('themeDropdown').classList.remove('show');
+        }
+        
+        document.addEventListener('click', (e) => {
+            if (!e.target.closest('#btnTheme') && !e.target.closest('#themeDropdown')) {
+                closeThemeDropdown();
+            }
+        });
+        
+        const savedTheme = localStorage.getItem('hexTheme') || 'dark';
+        setTheme(savedTheme);
+        
+        // ═══ SISTEMA DE TOASTS ═══
+        function showToast(type, title, message, duration = 4000) {
+            const toastIcons = {
+                success: 'bi-check-circle-fill',
+                error: 'bi-x-circle-fill',
+                warning: 'bi-exclamation-triangle-fill',
+                info: 'bi-info-circle-fill'
+            };
+            
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast-notification ${type}`;
+            toast.innerHTML = `
+                <div class="toast-icon"><i class="bi ${toastIcons[type]}"></i></div>
+                <div class="toast-content">
+                    <div class="toast-title">${title}</div>
+                    <div class="toast-message">${message}</div>
+                </div>
+                <button class="toast-close" onclick="removeToast(this.parentElement)"><i class="bi bi-x"></i></button>
+                <div class="toast-progress" style="animation-duration: ${duration}ms;"></div>
+            `;
+            container.appendChild(toast);
+            setTimeout(() => removeToast(toast), duration);
+        }
+        
+        function removeToast(toast) {
+            if (!toast || toast.classList.contains('removing')) return;
+            toast.classList.add('removing');
+            setTimeout(() => toast.remove(), 300);
+        }
+        
+        // ═══ AUTO-REFRESH ═══
+        let autoRefreshEnabled = localStorage.getItem('hexAutoRefresh') === 'true';
+        let countdownInterval = null;
+        let refreshCountdown = 30;
+        
+        function toggleAutoRefresh() {
+            autoRefreshEnabled = !autoRefreshEnabled;
+            localStorage.setItem('hexAutoRefresh', autoRefreshEnabled);
+            updateAutoRefreshUI();
+            
+            if (autoRefreshEnabled) {
+                startAutoRefresh();
+                showToast('success', 'Auto-refresh activado', 'El dashboard se actualizará cada 30 segundos');
+            } else {
+                stopAutoRefresh();
+                showToast('info', 'Auto-refresh desactivado', 'El dashboard ya no se actualizará automáticamente');
+            }
+        }
+        
+        function updateAutoRefreshUI() {
+            const btn = document.getElementById('btnAutoRefresh');
+            const indicator = document.getElementById('autoRefreshIndicator');
+            btn.classList.toggle('active', autoRefreshEnabled);
+            indicator.style.display = autoRefreshEnabled ? 'inline-flex' : 'none';
+        }
+        
+        function startAutoRefresh() {
+            refreshCountdown = 30;
+            updateCountdown();
+            countdownInterval = setInterval(() => {
+                refreshCountdown--;
+                updateCountdown();
+                if (refreshCountdown <= 0) {
+                    refreshData();
+                    refreshCountdown = 30;
+                }
+            }, 1000);
+        }
+        
+        function stopAutoRefresh() {
+            if (countdownInterval) clearInterval(countdownInterval);
+            refreshCountdown = 30;
+        }
+        
+        function updateCountdown() {
+            const el = document.getElementById('refreshCountdown');
+            if (el) el.textContent = refreshCountdown;
+        }
+        
+        async function refreshData() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                if (data.error) return;
+            } catch (error) {
+                console.error('Error refreshing data:', error);
+            }
+        }
+        
+        updateAutoRefreshUI();
+        if (autoRefreshEnabled) startAutoRefresh();
+        
+        // ═══ MODAL DE CONTRASEÑA ADMIN ═══
+        function openPasswordModal() {
+            new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
+        }
+        
+        // ═══ EDITAR USUARIO: CONTRASEÑA ═══
+        function openEditPasswordModal(username) {
+            document.getElementById('editPasswordUsername').textContent = username;
+            document.getElementById('editPasswordForm').action = '/edit_password/' + username;
+            document.getElementById('editPasswordForm').reset();
+            new bootstrap.Modal(document.getElementById('editPasswordModal')).show();
+        }
+        
+        // ═══ EDITAR USUARIO: EXPIRACIÓN ═══
+        function openEditExpiryModal(username, currentExp) {
+            document.getElementById('editExpiryUsername').textContent = username;
+            document.getElementById('editExpiryCurrent').textContent = currentExp;
+            document.getElementById('editExpiryForm').action = '/edit_expiry/' + username;
+            document.getElementById('editExpiryForm').reset();
+            new bootstrap.Modal(document.getElementById('editExpiryModal')).show();
+        }
+        
+        // ═══ ACTUALIZACIÓN DEL SISTEMA ═══
+        function startUpdate() {
+            if (!confirm('¿Deseas actualizar el sistema ahora? Se crearán backups automáticos.')) return;
+            
+            const modal = document.getElementById('updateModal');
+            const modalBox = document.getElementById('updateModalBox');
+            const btnUpdate = document.getElementById('btnUpdateNow');
+            
+            btnUpdate.disabled = true;
+            btnUpdate.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Actualizando...';
+            
+            modal.classList.add('active');
+            modalBox.innerHTML = `
+                <div class="update-spinner"></div>
+                <div class="update-modal-title">Actualizando Sistema</div>
+                <div class="update-modal-subtitle">Por favor espera...</div>
+                <div class="update-steps">
+                    <div class="update-step" id="step-menu">
+                        <div class="update-step-icon"><i class="bi bi-list"></i></div>
+                        <div class="update-step-text">Actualizando menú HEX</div>
+                        <div class="update-step-status">Pendiente</div>
+                    </div>
+                    <div class="update-step" id="step-templates">
+                        <div class="update-step-icon"><i class="bi bi-file-earmark-code"></i></div>
+                        <div class="update-step-text">Actualizando templates web</div>
+                        <div class="update-step-status">Pendiente</div>
+                    </div>
+                    <div class="update-step" id="step-backend">
+                        <div class="update-step-icon"><i class="bi bi-gear"></i></div>
+                        <div class="update-step-text">Actualizando backend</div>
+                        <div class="update-step-status">Pendiente</div>
+                    </div>
+                    <div class="update-step" id="step-version">
+                        <div class="update-step-icon"><i class="bi bi-tag"></i></div>
+                        <div class="update-step-text">Actualizando versión</div>
+                        <div class="update-step-status">Pendiente</div>
+                    </div>
+                </div>
+            `;
+            
+            animateStep('step-menu', 'Actualizando...');
+            setTimeout(() => animateStep('step-templates', 'Actualizando...'), 800);
+            setTimeout(() => animateStep('step-backend', 'Actualizando...'), 1600);
+            setTimeout(() => animateStep('step-version', 'Actualizando...'), 2400);
+            
+            fetch('/update_now', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) showUpdateSuccess(data);
+                else showUpdateError(data.message);
+            })
+            .catch(error => showUpdateError('Error de conexión: ' + error.message));
+        }
+        
+        function animateStep(stepId, statusText) {
+            const step = document.getElementById(stepId);
+            if (step) {
+                step.classList.add('active');
+                step.querySelector('.update-step-status').textContent = statusText;
+            }
+        }
+        
+        function completeStep(stepId, success, message) {
+            const step = document.getElementById(stepId);
+            if (step) {
+                step.classList.remove('active');
+                step.classList.add(success ? 'success' : 'error');
+                const icon = step.querySelector('.update-step-icon i');
+                icon.className = success ? 'bi bi-check-lg' : 'bi bi-x-lg';
+                step.querySelector('.update-step-status').textContent = message;
+            }
+        }
+        
+        function showUpdateSuccess(data) {
+            const modalBox = document.getElementById('updateModalBox');
+            completeStep('step-menu', data.details.menu.success, data.details.menu.message);
+            completeStep('step-templates', data.details.templates.success, data.details.templates.message);
+            completeStep('step-backend', data.details.backend.success, data.details.backend.message);
+            completeStep('step-version', data.details.version.success, data.details.version.message);
+            
+            showToast('success', '¡Actualización exitosa!', data.message);
+            
+            setTimeout(() => {
+                modalBox.innerHTML = `
+                    <div class="update-success-icon"><i class="bi bi-check-lg"></i></div>
+                    <div class="update-modal-title">¡Actualización Exitosa!</div>
+                    <div class="update-modal-subtitle">${data.message}</div>
+                    ${data.restart ? `<div class="alert alert-info border-0 mt-3" style="background: rgba(0, 188, 212, 0.1); color: #4dd0e1; font-size: 13px;">
+                        <i class="bi bi-arrow-repeat"></i> ${data.restart}
+                    </div>` : ''}
+                    <div style="margin-top: 15px; color: var(--text-secondary); font-size: 12px;">
+                        <i class="bi bi-clock"></i> Recargando en <span id="countdown">5</span> segundos...
+                    </div>
+                `;
+                
+                let count = 5;
+                const countdownEl = document.getElementById('countdown');
+                const interval = setInterval(() => {
+                    count--;
+                    if (countdownEl) countdownEl.textContent = count;
+                    if (count <= 0) {
+                        clearInterval(interval);
+                        window.location.reload();
+                    }
+                }, 1000);
+            }, 1500);
+        }
+        
+        function showUpdateError(message) {
+            const modalBox = document.getElementById('updateModalBox');
+            modalBox.innerHTML = `
+                <div style="width: 90px; height: 90px; margin: 0 auto 20px; background: linear-gradient(135deg, #ff5252, #ff1744); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 45px; color: #fff;">
+                    <i class="bi bi-exclamation-triangle"></i>
+                </div>
+                <div class="update-modal-title" style="color: #ff5252;">Error en la Actualización</div>
+                <div class="update-modal-subtitle">${message}</div>
+                <button class="btn-update-compact mt-3" onclick="window.location.reload()" style="background: linear-gradient(135deg, #6c757d, #495057);">
+                    <i class="bi bi-arrow-clockwise"></i> Recargar Página
+                </button>
+            `;
+            
+            const btnUpdate = document.getElementById('btnUpdateNow');
+            if (btnUpdate) {
+                btnUpdate.disabled = false;
+                btnUpdate.innerHTML = '<i class="bi bi-cloud-download"></i> Actualizar Ahora';
+            }
+        }
+        
+        // Toast de bienvenida
+        setTimeout(() => {
+            showToast('info', '¡Bienvenido!', 'Web Manager v{{ stats.update_info.local_version }}');
+        }, 500);
+    </script>
+</body>
+</html>

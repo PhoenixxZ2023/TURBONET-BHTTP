@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ═══════════════════════════════════════════════════════════════
-#  HEX WEB PANEL - INSTALADOR AUTOMÁTICO
+#  WEB PANEL - INSTALADOR AUTOMÁTICO
 #  Repositorio: https://github.com/rogellevi/HCR_BHTTP
 # ═══════════════════════════════════════════════════════════════
 
@@ -14,11 +14,11 @@ BOLD='\033[1m'; ACC='\033[38;5;44m'
 
 PANEL_DIR="/opt/hex-webpanel"
 PANEL_PORT=9000
-ADMIN_PASS="HexAdmin2026"
+ADMIN_PASS="admin26"
 
-ui_top() { echo -e "${ACC}╔════════════════════════════════════════════════════════════╗${NC}"; }
-ui_sep() { echo -e "${ACC}╠════════════════════════════════════════════════════════════╣${NC}"; }
-ui_bot() { echo -e "${ACC}╚════════════════════════════════════════════════════════════╝${NC}"; }
+ui_top() { echo -e "${ACC} ════════════════════════════════════════════════════════════${NC}"; }
+ui_sep() { echo -e "${ACC}════════════════════════════════════════════════════════════${NC}"; }
+ui_bot() { echo -e "${ACC}════════════════════════════════════════════════════════════${NC}"; }
 ui_fila() { echo -e "${ACC}║${NC} $1 ${ACC}║${NC}"; }
 ui_titulo() { printf "${ACC}║${NC}                     ${WHITE}${BOLD}%s${NC}                     ${ACC}║${NC}\n" "$1"; }
 ui_ok() { echo -e "     ${GREEN}✓${NC} ${WHITE}$1${NC}"; }
@@ -46,20 +46,20 @@ crear_estructura() {
     ui_info "Creando directorios..."
     mkdir -p "$PANEL_DIR/templates"
     cd "$PANEL_DIR" || exit 1
-    
+
     ui_info "Creando entorno virtual de Python..."
     python3 -m venv venv >/dev/null 2>&1
     source venv/bin/activate
-    
+
     ui_info "Instalando Flask y dependencias..."
-    pip install flask flask-login psutil >/dev/null 2>&1
+    pip install flask flask-login psutil bcrypt >/dev/null 2>&1
     ui_ok "Entorno configurado"; ui_fila ""; sleep 1
 }
 
 crear_app() {
     clear; ui_top; ui_titulo "3/5 CREANDO APLICACIÓN"; ui_sep; ui_fila ""
     ui_info "Creando archivo app.py..."
-    
+
     # IMPORTANTE: Usar <<'EOF_APP' (con comillas simples) para evitar expansión de variables
     cat > "$PANEL_DIR/app.py" <<'EOF_APP'
 import os
@@ -75,7 +75,7 @@ login_manager = LoginManager()
 login_manager.init_app(app)
 login_manager.login_view = 'login'
 
-ADMIN_PASSWORD = "HexAdmin2026"
+ADMIN_PASSWORD = "admin26"
 
 class User(UserMixin):
     def __init__(self, id):
@@ -186,14 +186,14 @@ def restart_service(svc):
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=9000, debug=False)
 EOF_APP
-    
+
     ui_ok "app.py creado"; ui_fila ""; sleep 1
 }
 
 crear_plantillas() {
     clear; ui_top; ui_titulo "4/5 CREANDO INTERFAZ WEB"; ui_sep; ui_fila ""
     ui_info "Creando plantillas HTML..."
-    
+
     # Login template
     cat > "$PANEL_DIR/templates/login.html" <<'EOF_LOGIN'
 <!DOCTYPE html>
@@ -210,7 +210,7 @@ crear_plantillas() {
 </head>
 <body>
     <div class="card p-4" style="width: 350px;">
-        <h3 class="text-center mb-4 text-success">🔐 Hex Panel</h3>
+        <h3 class="text-center mb-4 text-success">🔐 Panel</h3>
         {% with messages = get_flashed_messages() %}
           {% if messages %}<div class="alert alert-danger">{{ messages[0] }}</div>{% endif %}
         {% endwith %}
@@ -232,7 +232,7 @@ EOF_LOGIN
 <html lang="es">
 <head>
     <meta charset="UTF-8">
-    <title>Hex Manager - Dashboard</title>
+    <title>Manager - Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
         body { background-color: #121212; color: #e0e0e0; }
@@ -245,7 +245,7 @@ EOF_LOGIN
 <body>
     <nav class="navbar navbar-dark bg-dark border-bottom border-secondary">
         <div class="container-fluid">
-            <span class="navbar-brand mb-0 h1">🚀 Hex Web Panel</span>
+            <span class="navbar-brand mb-0 h1">Web Panel</span>
             <a href="/logout" class="btn btn-outline-danger btn-sm">Cerrar Sesión</a>
         </div>
     </nav>
@@ -337,14 +337,14 @@ EOF_LOGIN
 </body>
 </html>
 EOF_DASH
-    
+
     ui_ok "Plantillas creadas"; ui_fila ""; sleep 1
 }
 
 configurar_servicio() {
     clear; ui_top; ui_titulo "5/5 CONFIGURANDO SERVICIO"; ui_sep; ui_fila ""
     ui_info "Creando servicio systemd..."
-    
+
     cat > /etc/systemd/system/hex-webpanel.service <<EOF
 [Unit]
 Description=Hex Web Panel
@@ -360,24 +360,24 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
-    
+
     systemctl daemon-reload >/dev/null 2>&1
     systemctl enable hex-webpanel.service >/dev/null 2>&1
-    
+
     ui_info "Abriendo puerto $PANEL_PORT en firewall..."
     iptables -I INPUT -p tcp --dport $PANEL_PORT -j ACCEPT 2>/dev/null
     command -v ufw >/dev/null 2>&1 && ufw allow $PANEL_PORT/tcp >/dev/null 2>&1
-    
+
     ui_info "Iniciando panel web..."
     systemctl start hex-webpanel.service
-    
+
     sleep 2
     if systemctl is-active --quiet hex-webpanel.service; then
         ui_ok "Panel web activo"
     else
         ui_error "El panel no pudo iniciar"
     fi
-    
+
     ui_fila ""; sleep 1
 }
 

@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # ═══════════════════════════════════════════════════════════════
-#  MANAGER - INSTALADOR AUTOMÁTICO (Múltiples Puertos)
-#  Repositorio: https://github.com/rogellevi/HCR_BHTTP
+#  MANAGER - INSTALADOR AUTOMÁTICO (Múltiplas Portas)
+#  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 # ═══════════════════════════════════════════════════════════════
 
 set -o pipefail
@@ -23,13 +23,13 @@ ui_top() { echo -e "${ACC}╔═════════════════
 ui_sep() { echo -e "${ACC}╠════════════════════════════════════════════════════════════╣${NC}"; }
 ui_bot() { echo -e "${ACC}╚════════════════════════════════════════════════════════════╝${NC}"; }
 ui_fila() { echo -e "${ACC}║${NC} $1 ${ACC}║${NC}"; }
-ui_titulo() { printf "${ACC}║${NC}                     ${WHITE}${BOLD}%s${NC}                     ${ACC}║${NC}\n" "$1"; }
+ui_titulo() { printf "${ACC}║${NC}                      ${WHITE}${BOLD}%s${NC}                      ${ACC}║${NC}\n" "$1"; }
 ui_ok() { echo -e "     ${GREEN}✓${NC} ${WHITE}$1${NC}"; }
 ui_error() { echo -e "     ${RED}✗${NC} ${RED}$1${NC}"; }
 ui_info() { echo -e "     ${CYAN}ℹ${NC} ${GRIS}$1${NC}"; }
 ui_warn() { echo -e "     ${YELLOW}⚠${NC} ${YELLOW}$1${NC}"; }
 
-descargar_archivo() {
+baixar_arquivo() {
     local url="$1" destino="$2"
     if command -v curl >/dev/null 2>&1; then
         curl -fsSL --connect-timeout 15 --max-time 600 --retry 3 -o "$destino" "$url" 2>>"$LOG_FILE"
@@ -38,18 +38,18 @@ descargar_archivo() {
     fi
 }
 
-detectar_arquitectura() {
+detectar_arquitetura() {
     case "$(uname -m)" in
         x86_64|amd64) echo "amd64" ;;
         aarch64|arm64) echo "arm64" ;;
-        *) ui_error "Arquitectura no soportada: $(uname -m)"; exit 1 ;;
+        *) ui_error "Arquitetura não suportada: $(uname -m)"; exit 1 ;;
     esac
 }
 
-limpiar_instalacion_previa() {
-    ui_info "Verificando instalación previa..."
+limpar_instalacao_previa() {
+    ui_info "Verificando instalação prévia..."
     systemctl stop bhttp-server.service hcr-server.service 2>/dev/null || true
-    # Detener todas las instancias de plantillas existentes
+    # Parar todas as instâncias de templates existentes
     for svc in bhttp hcr udpgw; do
         for instance in $(systemctl list-units --full --all "${svc}@*.service" | grep -oP "${svc}@\K[0-9]+"); do
             systemctl stop "${svc}@${instance}.service" 2>/dev/null || true
@@ -58,42 +58,42 @@ limpiar_instalacion_previa() {
     rm -f /etc/systemd/system/bhttp-server.service /etc/systemd/system/hcr-server.service
     rm -f /etc/systemd/system/bhttp@.service /etc/systemd/system/hcr@.service /etc/systemd/system/udpgw@.service
     systemctl daemon-reload >/dev/null 2>&1
-    ui_ok "Limpieza completada"
+    ui_ok "Limpeza concluída"
 }
 
 instalar_dependencias() {
-    clear; ui_top; ui_titulo "1/6 INSTALANDO DEPENDENCIAS"; ui_sep; ui_fila ""
-    ui_info "Actualizando repositorios e instalando paquetes..."
+    clear; ui_top; ui_titulo "1/6 INSTALANDO DEPENDÊNCIAS"; ui_sep; ui_fila ""
+    ui_info "Atualizando repositórios e instalando pacotes..."
     apt-get update -y >/dev/null 2>&1
     apt-get install -y curl wget systemd iptables ufw lsof git cmake build-essential libssl-dev >/dev/null 2>&1
-    ui_ok "Dependencias instaladas"; ui_fila ""; sleep 1
+    ui_ok "Dependências instaladas"; ui_fila ""; sleep 1
 }
 
-descargar_binarios() {
-    clear; ui_top; ui_titulo "2/6 DESCARGANDO BINARIOS"; ui_sep; ui_fila ""
-    ARCH=$(detectar_arquitectura)
+baixar_binarios() {
+    clear; ui_top; ui_titulo "2/6 BAIXANDO BINÁRIOS"; ui_sep; ui_fila ""
+    ARCH=$(detectar_arquitetura)
     mkdir -p /opt/bhttp /opt/hcr /etc/hex /var/log/bhttp /var/log/hcr >/dev/null 2>&1
 
-    ui_info "Descargando BHTTP ($ARCH)..."
-    descargar_archivo "${GITHUB_RAW}/bhttp-server-v2.4.1-btun-compat-keepalive-linux-${ARCH}" "$BHTTP_BIN"
-    [ -f "$BHTTP_BIN" ] && [ -s "$BHTTP_BIN" ] && chmod +x "$BHTTP_BIN" && ui_ok "BHTTP descargado" || { ui_error "Fallo al descargar BHTTP"; exit 1; }
+    ui_info "Baixando BHTTP ($ARCH)..."
+    baixar_arquivo "${GITHUB_RAW}/bhttp-server-v2.4.1-btun-compat-keepalive-linux-${ARCH}" "$BHTTP_BIN"
+    [ -f "$BHTTP_BIN" ] && [ -s "$BHTTP_BIN" ] && chmod +x "$BHTTP_BIN" && ui_ok "BHTTP baixado" || { ui_error "Falha ao baixar BHTTP"; exit 1; }
 
-    ui_info "Descargando HCR ($ARCH)..."
-    descargar_archivo "${GITHUB_RAW}/hcr-server-linux-${ARCH}" "$HCR_BIN"
-    [ -f "$HCR_BIN" ] && [ -s "$HCR_BIN" ] && chmod +x "$HCR_BIN" && ui_ok "HCR descargado" || { ui_error "Fallo al descargar HCR"; exit 1; }
+    ui_info "Baixando HCR ($ARCH)..."
+    baixar_arquivo "${GITHUB_RAW}/hcr-server-linux-${ARCH}" "$HCR_BIN"
+    [ -f "$HCR_BIN" ] && [ -s "$HCR_BIN" ] && chmod +x "$HCR_BIN" && ui_ok "HCR baixado" || { ui_error "Falha ao baixar HCR"; exit 1; }
     ui_fila ""; sleep 1
 }
 
 compilar_udpgw() {
     clear; ui_top; ui_titulo "3/6 COMPILANDO UDPGW (BadVPN)"; ui_sep; ui_fila ""
-    ui_info "Descargando código fuente de BadVPN..."
+    ui_info "Baixando código-fonte do BadVPN..."
     cd /tmp || exit 1
     rm -rf badvpn
     git clone https://github.com/ambrop72/badvpn.git >/dev/null 2>&1
     cd badvpn || exit 1
     mkdir -p build && cd build || exit 1
 
-    ui_info "Compilando solo el módulo udpgw..."
+    ui_info "Compilando apenas o módulo udpgw..."
     cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 >/dev/null 2>&1
     make -j"$(nproc)" >/dev/null 2>&1
 
@@ -103,28 +103,29 @@ compilar_udpgw() {
         chmod +x /opt/udpgw/udpgw-server
         ui_ok "UDPGW compilado e instalado"
     else
-        ui_warn "La compilación de UDPGW falló"
+        ui_warn "A compilação do UDPGW falhou"
     fi
     cd /tmp || exit 1
     rm -rf badvpn
     ui_fila ""; sleep 1
 }
 
-configurar_servicios() {
-    clear; ui_top; ui_titulo "4/6 CONFIGURANDO SERVICIOS"; ui_sep; ui_fila ""
+configurar_servicos() {
+    clear; ui_top; ui_titulo "4/6 CONFIGURANDO SERVIÇOS"; ui_sep; ui_fila ""
 
-    # Archivos de puertos por defecto
+    # Arquivos de portas padrão
     echo -e "80\n8880" > /etc/hex/bhttp_ports.conf
     echo -e "8080" > /etc/hex/hcr_ports.conf
     echo -e "7100\n7200\n7300" > /etc/hex/udpgw_ports.conf
     touch "$USER_DB" && chmod 600 "$USER_DB"
 
-    # Plantilla BHTTP
-    ui_info "Configurando plantilla BHTTP..."
+    # Template BHTTP
+    ui_info "Configurando template BHTTP..."
     cat > /etc/systemd/system/bhttp@.service <<EOF
 [Unit]
 Description=BHTTP Server on port %i
 After=network.target
+
 [Service]
 Type=simple
 User=root
@@ -134,18 +135,20 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=bhttp-%i
+
 [Install]
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload >/dev/null 2>&1
-    ui_ok "Plantilla BHTTP configurada"
+    ui_ok "Template BHTTP configurado"
 
-    # Plantilla HCR
-    ui_info "Configurando plantilla HCR..."
+    # Template HCR
+    ui_info "Configurando template HCR..."
     cat > /etc/systemd/system/hcr@.service <<EOF
 [Unit]
 Description=HCR Server on port %i
 After=network.target
+
 [Service]
 Type=simple
 User=root
@@ -155,18 +158,20 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=hcr-%i
+
 [Install]
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload >/dev/null 2>&1
-    ui_ok "Plantilla HCR configurada"
+    ui_ok "Template HCR configurado"
 
-    # Plantilla UDPGW
-    ui_info "Configurando plantilla UDPGW..."
+    # Template UDPGW
+    ui_info "Configurando template UDPGW..."
     cat > /etc/systemd/system/udpgw@.service <<EOF
 [Unit]
 Description=BadVPN UDPGW Server on port %i
 After=network.target
+
 [Service]
 Type=simple
 User=root
@@ -176,19 +181,20 @@ RestartSec=5
 StandardOutput=journal
 StandardError=journal
 SyslogIdentifier=udpgw-%i
+
 [Install]
 WantedBy=multi-user.target
 EOF
     systemctl daemon-reload >/dev/null 2>&1
-    ui_ok "Plantilla UDPGW configurada"
+    ui_ok "Template UDPGW configurado"
     ui_fila ""; sleep 1
 }
 
-iniciar_y_configurar_firewall() {
-    clear; ui_top; ui_titulo "5/6 FIREWALL E INICIO"; ui_sep; ui_fila ""
+iniciar_e_configurar_firewall() {
+    clear; ui_top; ui_titulo "5/6 FIREWALL E INICIALIZAÇÃO"; ui_sep; ui_fila ""
 
-    # Función auxiliar para iniciar un servicio y abrir firewall
-    iniciar_puerto() {
+    # Função auxiliar para iniciar um serviço e abrir o firewall
+    iniciar_porta() {
         local svc=$1 port=$2 proto=$3
         systemctl enable "${svc}@${port}.service" >/dev/null 2>&1
         systemctl start "${svc}@${port}.service" 2>>"$LOG_FILE"
@@ -196,28 +202,28 @@ iniciar_y_configurar_firewall() {
         command -v ufw >/dev/null 2>&1 && ufw allow $port/$proto >/dev/null 2>&1
     }
 
-    ui_info "Iniciando puertos BHTTP..."
-    while read -r port; do [ -z "$port" ] && continue; iniciar_puerto "bhttp" "$port" "tcp"; done < /etc/hex/bhttp_ports.conf
+    ui_info "Iniciando portas BHTTP..."
+    while read -r port; do [ -z "$port" ] && continue; iniciar_porta "bhttp" "$port" "tcp"; done < /etc/hex/bhttp_ports.conf
     ui_ok "BHTTP iniciado"
 
-    ui_info "Iniciando puertos HCR..."
-    while read -r port; do [ -z "$port" ] && continue; iniciar_puerto "hcr" "$port" "tcp"; done < /etc/hex/hcr_ports.conf
+    ui_info "Iniciando portas HCR..."
+    while read -r port; do [ -z "$port" ] && continue; iniciar_porta "hcr" "$port" "tcp"; done < /etc/hex/hcr_ports.conf
     ui_ok "HCR iniciado"
 
-    ui_info "Iniciando puertos UDPGW..."
-    while read -r port; do [ -z "$port" ] && continue; iniciar_puerto "udpgw" "$port" "udp"; iniciar_puerto "udpgw" "$port" "tcp"; done < /etc/hex/udpgw_ports.conf
+    ui_info "Iniciando portas UDPGW..."
+    while read -r port; do [ -z "$port" ] && continue; iniciar_porta "udpgw" "$port" "udp"; iniciar_porta "udpgw" "$port" "tcp"; done < /etc/hex/udpgw_ports.conf
     ui_ok "UDPGW iniciado"
 
     ui_fila ""; sleep 1
 }
 
-instalar_menu_y_limpieza() {
-    clear; ui_top; ui_titulo "6/6 INSTALANDO MENÚ Y LIMPIEZA"; ui_sep; ui_fila ""
-    ui_info "Descargando menú de gestión..."
-    descargar_archivo "${GITHUB_RAW}/hex_menu.sh" "/usr/local/bin/hex_menu"
-    [ -f "/usr/local/bin/hex_menu" ] && chmod +x /usr/local/bin/hex_menu && cp /usr/local/bin/hex_menu /usr/bin/hex_menu 2>/dev/null && ui_ok "Menú instalado" || ui_error "Fallo al descargar menú"
+instalar_menu_e_limpeza() {
+    clear; ui_top; ui_titulo "6/6 INSTALANDO MENU E LIMPEZA"; ui_sep; ui_fila ""
+    ui_info "Baixando menu de gerenciamento..."
+    baixar_arquivo "${GITHUB_RAW}/hex_menu.sh" "/usr/local/bin/hex_menu"
+    [ -f "/usr/local/bin/hex_menu" ] && chmod +x /usr/local/bin/hex_menu && cp /usr/local/bin/hex_menu /usr/bin/hex_menu 2>/dev/null && ui_ok "Menu instalado" || ui_error "Falha ao baixar o menu"
 
-    ui_info "Configurando limpieza automática..."
+    ui_info "Configurando limpeza automática..."
     cat > /usr/local/bin/hex_cleanup.sh <<'EOF_CLEANUP'
 #!/bin/bash
 USER_DB="/etc/hex/users.txt"; LOG_FILE="/var/log/hex-cleanup.log"; CURRENT_TIMESTAMP=$(date +%s)
@@ -232,37 +238,37 @@ while IFS=: read -r user pass exp; do
         sed -i "/^${user}:/d" "$USER_DB"; ((deleted_count++))
     fi
 done < "$USER_DB"
-log "Limpieza completada. Eliminados: $deleted_count"
+log "Limpeza concluída. Removidos: $deleted_count"
 EOF_CLEANUP
     chmod +x /usr/local/bin/hex_cleanup.sh
     touch /var/log/hex-cleanup.log && chmod 644 /var/log/hex-cleanup.log
     (crontab -l 2>/dev/null | grep -v "hex_cleanup.sh"; echo "0 3 * * * /usr/local/bin/hex_cleanup.sh") | crontab -
-    ui_ok "Limpieza automática activada (diaria 03:00 AM)"
+    ui_ok "Limpeza automática ativada (diariamente às 03:00 AM)"
     ui_fila ""; sleep 1
 }
 
-instalar_panel_web() {
-    clear; ui_top; ui_titulo "INSTALANDO PANEL WEB"; ui_sep; ui_fila ""
+instalar_painel_web() {
+    clear; ui_top; ui_titulo "INSTALANDO PAINEL WEB"; ui_sep; ui_fila ""
 
-    ui_info "Instalando dependencias de Python..."
+    ui_info "Instalando dependências do Python..."
     apt-get install -y python3 python3-pip python3-venv >/dev/null 2>&1
 
     PANEL_DIR="/opt/hex-webpanel"
     PANEL_PORT=9000
     ADMIN_PASS="HexAdmin2026"
 
-    ui_info "Creando estructura del panel..."
+    ui_info "Criando estrutura do painel..."
     mkdir -p "$PANEL_DIR/templates"
     cd "$PANEL_DIR" || exit 1
     python3 -m venv venv >/dev/null 2>&1
     source venv/bin/activate
     pip install flask flask-login psutil >/dev/null 2>&1
 
-    ui_info "Creando aplicación..."
-    # (Aquí va todo el código de app.py que está en install_webpanel.sh)
-    # Para ahorrar espacio, puedes copiar el contenido de la función crear_app() del instalador del panel
+    ui_info "Criando aplicativo..."
+    # (Aqui vai todo o código do app.py que está no install_webpanel.sh)
+    # Para economizar espaço, você pode copiar o conteúdo da função criar_app() do instalador do painel
 
-    ui_info "Configurando servicio..."
+    ui_info "Configurando serviço..."
     cat > /etc/systemd/system/hex-webpanel.service <<EOF
 [Unit]
 Description=Hex Web Panel
@@ -286,60 +292,60 @@ EOF
     command -v ufw >/dev/null 2>&1 && ufw allow $PANEL_PORT/tcp >/dev/null 2>&1
 
     systemctl start hex-webpanel.service
-    ui_ok "Panel Web instalado en puerto $PANEL_PORT"
+    ui_ok "Painel Web instalado na porta $PANEL_PORT"
     ui_fila ""; sleep 1
 }
 
-crear_comandos_rapidos() {
-    clear; ui_top; ui_titulo "CREANDO COMANDOS RÁPIDOS"; ui_sep; ui_fila ""
+criar_comandos_rapidos() {
+    clear; ui_top; ui_titulo "CRIANDO COMANDOS RÁPIDOS"; ui_sep; ui_fila ""
     
-    ui_info "Creando comandos de acceso rápido..."
+    ui_info "Criando comandos de acesso rápido..."
     
-    # Crear enlaces simbólicos
+    # Criar links simbólicos
     ln -sf /usr/local/bin/hex_menu /usr/local/bin/bhttp 2>/dev/null
     ln -sf /usr/local/bin/hex_menu /usr/local/bin/hcr 2>/dev/null
     
-    ui_ok "Comando 'bhttp' creado"
-    ui_ok "Comando 'hcr' creado"
-    ui_ok "Comando 'hex_menu' también disponible"
+    ui_ok "Comando 'bhttp' criado"
+    ui_ok "Comando 'hcr' criado"
+    ui_ok "Comando 'hex_menu' também disponível"
     
     ui_fila ""
-    ui_fila "  ${GRIS}Ahora puedes abrir el menú con:${NC}"
-    ui_fila "  ${YELLOW}sudo bhttp${NC}  o  ${YELLOW}sudo hcr${NC}  o  ${YELLOW}sudo hex_menu${NC}"
+    ui_fila "  ${GRIS}Agora você pode abrir o menu com:${NC}"
+    ui_fila "  ${YELLOW}sudo bhttp${NC}  ou  ${YELLOW}sudo hcr${NC}  ou  ${YELLOW}sudo hex_menu${NC}"
     ui_fila ""
     sleep 1
 }
 
-mostrar_resumen() {
-    clear; ui_top; ui_titulo "✓ INSTALACIÓN COMPLETADA"; ui_sep; ui_fila ""
+mostrar_resumo() {
+    clear; ui_top; ui_titulo "✓ INSTALAÇÃO CONCLUÍDA"; ui_sep; ui_fila ""
 
     # Contar estados
     bhttp_active=$(grep -c "." /etc/hex/bhttp_ports.conf 2>/dev/null || echo 0)
     hcr_active=$(grep -c "." /etc/hex/hcr_ports.conf 2>/dev/null || echo 0)
     udpgw_active=$(grep -c "." /etc/hex/udpgw_ports.conf 2>/dev/null || echo 0)
 
-    ui_fila "  ${CYAN}BHTTP${NC} - $bhttp_active puertos configurados  ${GREEN}● ACTIVO${NC}"
-    ui_fila "  ${CYAN}HCR${NC}   - $hcr_active puertos configurados  ${GREEN}● ACTIVO${NC}"
-    ui_fila "  ${CYAN}UDPGW${NC}  - $udpgw_active puertos configurados  ${GREEN}● ACTIVO${NC}"
+    ui_fila "  ${CYAN}BHTTP${NC} - $bhttp_active portas configuradas  ${GREEN}● ATIVO${NC}"
+    ui_fila "  ${CYAN}HCR${NC}   - $hcr_active portas configuradas  ${GREEN}● ATIVO${NC}"
+    ui_fila "  ${CYAN}UDPGW${NC}  - $udpgw_active portas configuradas  ${GREEN}● ATIVO${NC}"
     ui_fila ""
     ui_sep
     ui_fila "  ${BOLD}Comando:${NC}  ${YELLOW}hex_menu | bhttp | hcr${NC}"
     ui_fila "  ${BOLD}IP:${NC}       ${YELLOW}$(hostname -I | awk '{print $1}')${NC}"
-    ui_fila "  ${BOLD}Repo:${NC}     ${CYAN}github.com/rogellevi/HCR_BHTTP${NC}"
+    ui_fila "  ${BOLD}Repo:${NC}     ${CYAN}github.com/PhoenixxZ2023/TURBONET-BHTTP${NC}"
     ui_fila ""
     ui_bot; echo ""
 }
 
-# EJECUCIÓN
-if [ "$EUID" -ne 0 ]; then echo -e "${RED}✗ Requiere root${NC}"; exit 1; fi
+# EXECUÇÃO
+if [ "$EUID" -ne 0 ]; then echo -e "${RED}✗ Requer root${NC}"; exit 1; fi
 : > "$LOG_FILE" 2>/dev/null
-limpiar_instalacion_previa
+limpar_instalacao_previa
 instalar_dependencias
-descargar_binarios
+baixar_binarios
 compilar_udpgw
-configurar_servicios
-iniciar_y_configurar_firewall
-instalar_menu_y_limpieza
-instalar_panel_web
-crear_comandos_rapidos
-mostrar_resumen
+configurar_servicos
+iniciar_e_configurar_firewall
+instalar_menu_e_limpeza
+instalar_painel_web
+criar_comandos_rapidos
+mostrar_resumo

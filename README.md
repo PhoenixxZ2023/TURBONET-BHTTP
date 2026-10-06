@@ -62,13 +62,13 @@ Copie e cole um dos comandos abaixo no seu terminal como root para iniciar a ins
 curl -sSL [https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh](https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh) | bash
 ````
 
-### Método 2: Solo Panel Web (si ya tienes el sistema instalado)
+### Método 2: Apenas Painel Web (se já tiver o sistema instalado):
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/rogellevi/HCR_BHTTP/main/install_webpanel.sh | bash
 ```
 
-### Método 3: Instalación manual
+### Método 3: Instalação manual (via git clone):
 
 ```bash
 git clone https://github.com/rogellevi/HCR_BHTTP.git
@@ -76,7 +76,7 @@ cd HCR_BHTTP
 sudo bash install.sh
 ```
 
-### Otros
+### Outros
 
 ```
 wget -qO- https://raw.githubusercontent.com/rogellevi/HCR_BHTTP/main/install.sh | bash

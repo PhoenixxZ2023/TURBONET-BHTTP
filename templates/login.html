@@ -1,9 +1,9 @@
 <!DOCTYPE html>
-<html lang="es">
+<html lang="pt-BR">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel - Acceso</title>
+    <title>Painel - Acesso</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
     <style>
@@ -108,8 +108,8 @@
     <div class="login-card">
         <div class="logo-container">
             <div class="logo-hex"><i class="bi bi-hexagon-fill"></i></div>
-            <h1 class="title"> BIENVENIDO </h1>
-            <p class="subtitle">Panel de Administración</p>
+            <h1 class="title"> BEM-VINDO </h1>
+            <p class="subtitle">Painel de Administração</p>
         </div>
         {% with messages = get_flashed_messages() %}
           {% if messages %}
@@ -120,12 +120,12 @@
         {% endwith %}
         <form method="POST">
             <div class="form-floating mb-3 position-relative">
-                <input type="password" class="form-control" id="password" name="password" placeholder="Contraseña" required autofocus>
-                <label for="password"><i class="bi bi-lock-fill me-2"></i>Contraseña</label>
+                <input type="password" class="form-control" id="password" name="password" placeholder="Senha" required autofocus>
+                <label for="password"><i class="bi bi-lock-fill me-2"></i>Senha</label>
                 <i class="bi bi-key-fill input-icon"></i>
             </div>
             <button type="submit" class="btn btn-login">
-                <i class="bi bi-box-arrow-in-right me-2"></i>Iniciar Sesión
+                <i class="bi bi-box-arrow-in-right me-2"></i>Entrar
             </button>
         </form>
         <p class="footer-text"><i class="bi bi-shield-lock-fill"></i> Powered By | CloudGT</p>

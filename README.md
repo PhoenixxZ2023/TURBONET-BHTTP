@@ -59,19 +59,19 @@ Copie e cole um dos comandos abaixo no seu terminal como root para iniciar a ins
 
 **Instalação completa (recomendada):**
 ```bash
-curl -sSL [https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh](https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh) | bash
+curl -sSL https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh | bash
 ````
 
 ### Método 2: Apenas Painel Web (se já tiver o sistema instalado):
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/rogellevi/HCR_BHTTP/main/install_webpanel.sh | bash
+curl -sSL https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install_webpanel.sh | bash
 ```
 
 ### Método 3: Instalação manual (via git clone):
 
 ```bash
-git clone https://github.com/rogellevi/HCR_BHTTP.git
+git clone https://github.com/PhoenixxZ2023/TURBONET-BHTTP.git
 cd HCR_BHTTP
 sudo bash install.sh
 ```
@@ -79,9 +79,9 @@ sudo bash install.sh
 ### Outros
 
 ```
-wget -qO- https://raw.githubusercontent.com/rogellevi/HCR_BHTTP/main/install.sh | bash
+wget -qO- https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh | bash
 ```
 
 ```
-curl -sSL https://raw.githubusercontent.com/rogellevi/HCR_BHTTP/main/install.sh | bash
+curl -sSL https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh | bash
 ```

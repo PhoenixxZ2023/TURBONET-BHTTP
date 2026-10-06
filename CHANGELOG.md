@@ -2,31 +2,31 @@
 
 ## [1.0.1] - 2026-10-04
 
-### Añadido
-- Panel Web moderno con diseño glassmorphism
-- Modal elegante para agregar usuarios
-- Soporte para múltiples puertos en BHTTP, HCR y UDPGW
-- Sistema de actualización automática
-- Limpieza automática de usuarios expirados
+### Adicionado
+- Painel Web moderno com design glassmorphism
+- Modal elegante para adicionar usuários
+- Suporte para múltiplas portas no BHTTP, HCR e UDPGW
+- Sistema de atualização automática
+- Limpeza automática de usuários expirados
 
-### Mejorado
-- Dashboard responsive para móviles
-- Backend con rutas absolutas (compatible con systemd)
-- Validaciones mejoradas en creación de usuarios
-- Logs detallados de todas las acciones
+### Melhorado
+- Dashboard responsivo para dispositivos móveis
+- Backend com caminhos absolutos (compatível com systemd)
+- Validações melhoradas na criação de usuários
+- Logs detalhados de todas as ações
 
-### Corregido
-- Error al crear usuarios con contraseñas especiales
-- Botones de control de servicios no funcionaban
-- Diseño visual en pantallas pequeñas
+### Corrigido
+- Erro ao criar usuários com senhas contendo caracteres especiais
+- Botões de controle de serviços não funcionavam
+- Design visual em telas pequenas
 
 ---
 
 ## [1.0.0] - 2026-10-02
 
-### Añadido
-- Panel Web básico
-- Gestión de usuarios con expiración
+### Adicionado
+- Painel Web básico
+- Gerenciamento de usuários com expiração
 
-### Corregido
-- Errores de sintaxis en instalación
+### Corrigido
+- Erros de sintaxe na instalação

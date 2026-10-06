@@ -1,4 +1,4 @@
-# 🚀 MANAGER - Panel de Gestión Completo
+# 🚀 MANAGER - Painel de Gerenciamento Completo
 
 <div align="center">
 
@@ -8,58 +8,59 @@
 ![Bash](https://img.shields.io/badge/Bash-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)
 ![Python](https://img.shields.io/badge/Python-3776AB?style=for-the-badge&logo=python&logoColor=white)
 
-**Sistema todo-en-uno para gestión de servicios BHTTP, HCR, UDPGW y Panel Web**
+**Sistema tudo-em-um para gerenciamento de serviços BHTTP, HCR, UDPGW e Painel Web**
 
-[Instalación](#-instalación-rápida) • [Características](#-características) • [Uso](#-uso) • [Documentación](#-documentación)
+[Instalação](#-instalação) • [Características](#-características) • [Documentação](#-documentação)
 
 </div>
 
 ---
 
-## 📖 Descripción
+## 📖 Descrição
 
-**MANAGER** es un sistema completo de administración de servidores que permite gestionar múltiples servicios de túnel (BHTTP, HCR, UDPGW) con una interfaz de terminal elegante y un **Panel Web moderno** con diseño glassmorphism. Incluye gestión automática de usuarios con expiración, limpieza programada y sistema de actualizaciones OTA desde GitHub.
+O **MANAGER** é um sistema completo de administração de servidores que permite gerenciar múltiplos serviços de túnel (BHTTP, HCR, UDPGW) com uma interface de terminal elegante e um **Painel Web moderno** com design glassmorphism. Inclui gerenciamento automático de usuários com expiração, limpeza programada e sistema de atualizações OTA diretamente pelo GitHub.
 
 ## ✨ Características
 
-### 🖥️ Menú de Terminal
-- ✅ Gestión de **múltiples puertos** para BHTTP, HCR y UDPGW
-- ✅ Creación de usuarios del sistema con **expiración automática**
-- ✅ **Limpieza automática** diaria de usuarios expirados (cron)
-- ✅ Control individual y masivo de servicios
-- ✅ Visualización de logs en tiempo real
-- ✅ Desinstalación completa con un clic
+### 🖥️ Menu no Terminal
+- ✅ Gerenciamento de **múltiplas portas** para BHTTP, HCR e UDPGW
+- ✅ Criação de usuários do sistema com **expiração automática**
+- ✅ **Limpeza automática** diária de usuários expirados (cron)
+- ✅ Controle individual e em massa de serviços
+- ✅ Visualização de logs em tempo real
+- ✅ Desinstalação completa com um clique
 
-### 🌐 Panel Web
-- 🎨 Diseño moderno con **glassmorphism** y gradientes animados
-- 📱 **100% Responsive** (funciona en móviles y desktop)
-- 🔐 Login seguro con autenticación
-- 📊 Dashboard con indicadores **ONLINE/OFFLINE** animados
-- 👥 Modal elegante para agregar usuarios
-- 🎛️ Botones de Iniciar/Detener/Reiniciar por servicio
-- ⚙️ Cambio de puerto del panel desde la interfaz
+### 🌐 Painel Web
+- 🎨 Design moderno com **glassmorphism** e gradientes animados
+- 📱 **100% Responsivo** (funciona em celulares e desktop)
+- 🔐 Login seguro com autenticação
+- 📊 Dashboard com indicadores **ONLINE/OFFLINE** animados
+- 👥 Modal elegante para adicionar usuários
+- 🎛️ Botões de Iniciar/Parar/Reiniciar por serviço
+- ⚙️ Mudança da porta do painel direto pela interface
 
-### 🔄 Sistema de Actualizaciones
-- 🔍 Detección automática de nuevas versiones
-- 📦 Actualización granular (menú, templates, backend)
-- 💾 Backups automáticos antes de actualizar
-- ✅ Validación de sintaxis antes de aplicar cambios
+### 🔄 Sistema de Atualizações
+- 🔍 Detecção automática de novas versões
+- 📦 Atualização granular (menu, templates, backend)
+- 💾 Backups automáticos antes de atualizar
+- ✅ Validação de sintaxe antes de aplicar mudanças
 - 📝 Changelog integrado
 
 ## 🎯 Requisitos
 
-- **Sistema Operativo:** Ubuntu 22.04 o superior
-- **Permisos:** Root (sudo)
-- **Arquitectura:** x86_64 (amd64) o ARM64
-- **Conexión:** Internet para la instalación inicial
+- **Sistema Operacional:** Ubuntu 22.04 ou superior
+- **Permissões:** Root (sudo)
+- **Arquitetura:** x86_64 (amd64) ou ARM64
+- **Conexão:** Internet para a instalação inicial
 
-## 🚀 Instalación Rápida
+## 🚀 Instalação
 
-### Método 1: Instalación completa (todo en uno)
+Copie e cole um dos comandos abaixo no seu terminal como root para iniciar a instalação.
 
+**Instalação completa (recomendada):**
 ```bash
-curl -sSL https://raw.githubusercontent.com/rogellevi/HCR_BHTTP/main/install.sh | bash
-```
+curl -sSL [https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh](https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh) | bash
+````
 
 ### Método 2: Solo Panel Web (si ya tienes el sistema instalado)
 

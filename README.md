@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-3.1.2-00c853?style=for-the-badge&logo=github)
+![Version](https://img.shields.io/badge/version-1.1.1-00c853?style=for-the-badge&logo=github)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 ![Bash](https://img.shields.io/badge/Bash-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)
@@ -72,7 +72,7 @@ curl -sSL https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/in
 
 ```bash
 git clone https://github.com/PhoenixxZ2023/TURBONET-BHTTP.git
-cd HCR_BHTTP
+cd TURBONET-BHTTP
 sudo bash install.sh
 ```
 
@@ -85,3 +85,15 @@ wget -qO- https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/in
 ```
 curl -sSL https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/install.sh | bash
 ```
+
+---
+
+## 🔐 Segurança (v1.1.0)
+
+- **Senha do painel:** não existe mais senha padrão. No primeiro start o painel gera uma senha aleatória, mostrada no fim da instalação e guardada em `/etc/hex/webpanel_initial_password.txt` (apagada quando você troca a senha no dashboard).
+- **Painel só via proxy/TLS (recomendado):** crie `/etc/hex/webpanel.env` com `HEX_PANEL_HOST=127.0.0.1` (e `HEX_PANEL_HTTPS=1` atrás de TLS) e reinicie `hex-webpanel`.
+- **UDPGW:** por padrão escuta só em `127.0.0.1` (use dentro do túnel SSH). Para expor publicamente: `HEX_UDPGW_PUBLIC=1 bash install.sh` (cria `/etc/hex/udpgw_public`).
+- **Shell dos usuários:** por padrão `/bin/bash`. Para contas só de túnel, teste `echo /usr/sbin/nologin > /etc/hex/user_shell`.
+- **CSRF:** todo POST exige token (`csrf_token` no formulário ou cabeçalho `X-CSRF-Token`); excluir/serviços/sair são POST, não links.
+- **Integridade:** os instaladores e o OTA conferem o SHA256 de `version.json`. Para exigir isso sempre: `touch /etc/hex/require_checksum`.
+- **Publicando uma versão:** na raiz do repo rode `./gen_version.sh 1.1.1 "resumo"` antes do commit; ele recalcula os SHA256 de todos os arquivos (inclusive binários).

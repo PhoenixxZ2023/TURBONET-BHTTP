@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ═══════════════════════════════════════════════════════════════
-#  MANAGER - MENU DE GERENCIAMENTO COMPLETO (v1.0.0)
+#  MANAGER - MENU DE GERENCIAMENTO COMPLETO (v1.1.0)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #  Com sistema de atualização automática e porta web configurável
 # ═══════════════════════════════════════════════════════════════
@@ -37,23 +37,73 @@ touch "$USER_DB" && chmod 600 "$USER_DB"
 [ -f "$UDPGW_PORTS_CONF" ] || echo -e "7300\n7301" > "$UDPGW_PORTS_CONF"
 [ -f "$WEBPANEL_PORT_FILE" ] || echo "9000" > "$WEBPANEL_PORT_FILE"
 
-# Instalação automática de limpeza ao iniciar
-if [ ! -f "$CLEANUP_SCRIPT" ]; then
+# Instalação automática de limpeza ao iniciar (recria se for a versão antiga, sem o marcador v2)
+if [ ! -f "$CLEANUP_SCRIPT" ] || ! grep -q "hex_cleanup v2" "$CLEANUP_SCRIPT" 2>/dev/null; then
     cat > "$CLEANUP_SCRIPT" <<'EOF_CLEANUP'
 #!/bin/bash
-USER_DB="/etc/hex/users.txt"; LOG_FILE="/var/log/hex-cleanup.log"; CURRENT_TIMESTAMP=$(date +%s)
+# hex_cleanup v2 - remove contas gerenciadas que expiraram
+# - só mexe em contas do grupo hexusers com UID >= 1000
+# - linha inválida/data inválida NUNCA apaga a conta (antes virava "expirado")
+# - aceita ':' dentro da senha (usa o primeiro e o último campo)
+# - usa a mesma trava de arquivo do painel web
+HEX_DIR="${HEX_DIR:-/etc/hex}"
+USER_DB="$HEX_DIR/users.txt"
+LOG_FILE="${HEX_CLEANUP_LOG:-/var/log/hex-cleanup.log}"
+USER_GROUP="hexusers"
+
 log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $1" >> "$LOG_FILE"; }
-[ ! -s "$USER_DB" ] && exit 0
-deleted_count=0
-while IFS=: read -r user pass exp; do
-    [ -z "$user" ] && continue
-    exp_timestamp=$(date -d "$exp" +%s 2>/dev/null || echo "0")
-    if [ "$exp_timestamp" -lt "$CURRENT_TIMESTAMP" ]; then
-        id "$user" >/dev/null 2>&1 && userdel -r "$user" 2>/dev/null
-        sed -i "/^${user}:/d" "$USER_DB"; ((deleted_count++))
+
+[ -s "$USER_DB" ] || exit 0
+
+exec 9>"$HEX_DIR/.users.lock"
+flock 9
+
+now=$(date +%s)
+tmp=$(mktemp "$HEX_DIR/users.XXXXXX") || { log "ERRO: mktemp falhou"; exit 1; }
+trap 'rm -f "$tmp"' EXIT
+deleted=0; kept_invalid=0; failed=0
+
+while IFS= read -r line || [ -n "$line" ]; do
+    [ -z "$line" ] && continue
+    user=${line%%:*}
+    exp=${line##*:}
+
+    if ! [[ "$user" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]] || ! [[ "$exp" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+        log "AVISO: linha inválida mantida (usuário='${user:0:32}')"
+        echo "$line" >> "$tmp"; ((kept_invalid++)); continue
+    fi
+    if ! exp_ts=$(date -d "$exp" +%s 2>/dev/null); then
+        log "AVISO: data inválida '$exp' para $user; conta mantida"
+        echo "$line" >> "$tmp"; ((kept_invalid++)); continue
+    fi
+
+    if [ "$exp_ts" -ge "$now" ]; then
+        echo "$line" >> "$tmp"; continue
+    fi
+
+    # expirado: só apaga se for conta gerenciada (grupo hexusers, UID >= 1000)
+    if id "$user" >/dev/null 2>&1; then
+        uid=$(id -u "$user")
+        if [ "$uid" -lt 1000 ] || ! id -nG "$user" | tr ' ' '\n' | grep -qx "$USER_GROUP"; then
+            log "AVISO: $user não é conta gerenciada (uid=$uid); NÃO removido, linha descartada do banco"
+            continue
+        fi
+        pkill -KILL -u "$user" 2>/dev/null
+        if userdel -r "$user" 2>/dev/null || ! id "$user" >/dev/null 2>&1; then
+            ((deleted++))
+        else
+            log "ERRO: userdel falhou para $user; mantido no banco"
+            echo "$line" >> "$tmp"; ((failed++))
+        fi
+    else
+        ((deleted++))   # já não existe no sistema; só limpa a linha
     fi
 done < "$USER_DB"
-log "Limpeza concluída. Removidos: $deleted_count"
+
+chmod 600 "$tmp"
+mv -f "$tmp" "$USER_DB"
+trap - EXIT
+log "Limpeza concluída. Removidos: $deleted | Linhas inválidas mantidas: $kept_invalid | Falhas: $failed"
 EOF_CLEANUP
     chmod +x "$CLEANUP_SCRIPT"
     touch "$CLEANUP_LOG" && chmod 644 "$CLEANUP_LOG"
@@ -74,6 +124,30 @@ ui_opcion() { printf "     ${CYAN}[${NC}${YELLOW}$1${NC}${CYAN}]${NC}  $2\n"; }
 ui_info() { echo -e "     ${CYAN}ℹ${NC} ${GRIS}$1${NC}"; }
 ui_ok() { echo -e "     ${GREEN}✓${NC} ${WHITE}$1${NC}"; }
 ui_error() { echo -e "     ${RED}✗${NC} ${RED}$1${NC}"; }
+
+# ── validação e banco de usuários (seguros para senhas com / & \ e ':') ──
+UDPGW_PUBLIC_FLAG="/etc/hex/udpgw_public"
+valid_username() { [[ "$1" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; }
+valid_user_password() { [[ ${#1} -ge 4 && ${#1} -le 64 && "$1" != *:* && "$1" =~ ^[[:print:]]+$ ]]; }
+db_lock() { exec 8>"/etc/hex/.users.lock"; flock 8; }
+db_has() { awk -F: -v u="$1" '$1==u{f=1} END{exit !f}' "$USER_DB"; }
+# db_update <usuário> pass|exp|delete [valor]   (chamar dentro de: ( db_lock; db_update ... ))
+db_update() {
+    local user="$1" field="$2" value="${3:-}" tmp
+    tmp=$(mktemp /etc/hex/users.XXXXXX) || return 1
+    if HEX_U="$user" HEX_F="$field" HEX_V="$value" awk '
+        { n=split($0,a,":"); u=a[1]; e=a[n]
+          if (u != ENVIRON["HEX_U"] || n < 3) { print; next }
+          p=substr($0, length(u)+2, length($0)-length(u)-length(e)-2)
+          if (ENVIRON["HEX_F"]=="delete") next
+          if (ENVIRON["HEX_F"]=="pass") p=ENVIRON["HEX_V"]
+          if (ENVIRON["HEX_F"]=="exp") e=ENVIRON["HEX_V"]
+          print u ":" p ":" e }' "$USER_DB" > "$tmp"; then
+        chmod 600 "$tmp" && mv -f "$tmp" "$USER_DB"
+    else
+        rm -f "$tmp"; return 1
+    fi
+}
 
 get_svc_status() {
     local svc=$1 conf=$2
@@ -193,180 +267,133 @@ menu_atualizacoes() {
     fi
 }
 
+# ── OTA seguro: manifesto + SHA256 + sintaxe + troca atômica ──
+hex_obter_manifesto() {
+    HEX_MANIFEST=$(mktemp) || return 1
+    if curl -fsSL --connect-timeout 10 "${GITHUB_RAW}/version.json" -o "$HEX_MANIFEST" 2>/dev/null && [ -s "$HEX_MANIFEST" ]; then
+        return 0
+    fi
+    rm -f "$HEX_MANIFEST"; return 1
+}
+hex_sha_esperado() {
+    python3 - "$HEX_MANIFEST" "$1" <<'PY'
+import json, sys
+try:
+    print(json.load(open(sys.argv[1])).get("sha256", {}).get(sys.argv[2], ""))
+except Exception:
+    print("")
+PY
+}
+# hex_instalar_arquivo <caminho-no-repo> <destino> <modo> <sh|py|html>
+hex_instalar_arquivo() {
+    local rel="$1" dest="$2" mode="$3" kind="$4" tmpf exp got
+    tmpf=$(mktemp "$(dirname "$dest")/.dl.XXXXXX") || { ui_error "Sem permissão em $(dirname "$dest")"; return 1; }
+    if ! curl -fsSL --connect-timeout 10 --max-time 120 "${GITHUB_RAW}/${rel}" -o "$tmpf" 2>/dev/null || [ ! -s "$tmpf" ]; then
+        rm -f "$tmpf"; ui_error "Erro ao baixar $rel"; return 1
+    fi
+    exp=$(hex_sha_esperado "$rel")
+    if [ -n "$exp" ]; then
+        got=$(sha256sum "$tmpf" | cut -d' ' -f1)
+        if [ "$got" != "$exp" ]; then rm -f "$tmpf"; ui_error "SHA256 não confere para $rel (recusado)"; return 1; fi
+    elif [ -f /etc/hex/require_checksum ]; then
+        rm -f "$tmpf"; ui_error "version.json sem SHA256 para $rel (recusado)"; return 1
+    fi
+    case "$kind" in
+        sh) bash -n "$tmpf" 2>/dev/null || { rm -f "$tmpf"; ui_error "Erro de sintaxe em $rel"; return 1; } ;;
+        py) python3 -c 'import sys; compile(open(sys.argv[1]).read(), sys.argv[1], "exec")' "$tmpf" 2>/dev/null \
+                || { rm -f "$tmpf"; ui_error "Erro de sintaxe em $rel"; return 1; } ;;
+    esac
+    [ -s "$dest" ] && cp -p "$dest" "${dest}.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null
+    chmod "$mode" "$tmpf" && mv -f "$tmpf" "$dest"
+}
+hex_escrever_versao() {
+    local v
+    v=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version",""))' "$HEX_MANIFEST" 2>/dev/null)
+    if [ -n "$v" ]; then echo "$v" > "$VERSION_FILE"; ui_ok "Versão atualizada para $v"; fi
+}
+hex_atualizar_menu() {
+    hex_instalar_arquivo hex_menu.sh /usr/local/bin/hex_menu 755 sh || return 1
+    ui_ok "Menu atualizado"
+    hex_instalar_arquivo hex_cleanup.sh "$CLEANUP_SCRIPT" 755 sh && ui_ok "Script de limpeza atualizado"
+    return 0
+}
+hex_atualizar_templates() {
+    [ -d /opt/hex-webpanel/templates ] || { ui_error "O Painel Web não está instalado"; return 1; }
+    local ok=0
+    hex_instalar_arquivo templates/login.html /opt/hex-webpanel/templates/login.html 644 html && ui_ok "login.html atualizado" || ok=1
+    hex_instalar_arquivo templates/dashboard.html /opt/hex-webpanel/templates/dashboard.html 644 html && ui_ok "dashboard.html atualizado" || ok=1
+    return $ok
+}
+hex_atualizar_backend() {
+    [ -f /opt/hex-webpanel/app.py ] || { ui_error "O Painel Web não está instalado"; return 1; }
+    hex_instalar_arquivo app.py /opt/hex-webpanel/app.py 644 py && ui_ok "Backend atualizado"
+}
+
 atualizar_menu() {
     clear; ui_top; ui_titulo "ATUALIZAR MENU"; ui_sep; ui_fila ""
-    ui_info "Baixando nova versão do menu..."
-    
-    cp /usr/local/bin/hex_menu /usr/local/bin/hex_menu.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null
-    
-    if curl -fsSL "${GITHUB_RAW}/hex_menu.sh" -o /tmp/hex_menu_new.sh 2>/dev/null; then
-        if bash -n /tmp/hex_menu_new.sh 2>/dev/null; then
-            mv /tmp/hex_menu_new.sh /usr/local/bin/hex_menu
-            chmod +x /usr/local/bin/hex_menu
-            
-            if curl -fsSL "${GITHUB_RAW}/version.json" -o /tmp/version_new.json 2>/dev/null; then
-                local new_version=$(grep -o '"version": *"[^"]*"' /tmp/version_new.json | head -1 | cut -d'"' -f4)
-                if [ -n "$new_version" ]; then
-                    echo "$new_version" > "$VERSION_FILE"
-                    ui_ok "Versão atualizada para $new_version"
-                fi
-                rm -f /tmp/version_new.json
-            fi
-            
-            ui_ok "Menu atualizado com sucesso"
-            ui_fila "  ${YELLOW}⚠ Reinicie o menu para aplicar as mudanças${NC}"
-            ui_fila "  ${GRIS}Backup salvo em: /usr/local/bin/hex_menu.backup.*${NC}"
-        else
-            ui_error "O arquivo baixado contém erros de sintaxe"
-            ui_info "A atualização não foi aplicada"
-            rm -f /tmp/hex_menu_new.sh
+    ui_info "Baixando nova versão do menu (com verificação SHA256)..."
+    if hex_obter_manifesto; then
+        if hex_atualizar_menu; then
+            hex_escrever_versao
+            ui_fila " ${YELLOW}⚠ Reinicie o menu para aplicar as mudanças${NC}"
         fi
+        rm -f "$HEX_MANIFEST"
     else
-        ui_error "Erro ao baixar o menu"
+        ui_error "Não foi possível baixar o version.json"
     fi
-    
     ui_fila ""; pause_return
     menu_atualizacoes
 }
 
 atualizar_templates() {
     clear; ui_top; ui_titulo "ATUALIZAR TEMPLATES"; ui_sep; ui_fila ""
-    
-    if [ ! -d "/opt/hex-webpanel/templates" ]; then
-        ui_error "O Painel Web não está instalado"
-        pause_return
-        menu_atualizacoes
-        return
-    fi
-    
-    ui_info "Baixando novos templates..."
-    
-    local backup_dir="/opt/hex-webpanel/templates.backup.$(date +%Y%m%d_%H%M%S)"
-    mkdir -p "$backup_dir"
-    cp -r /opt/hex-webpanel/templates/* "$backup_dir/" 2>/dev/null
-    
-    local success=true
-    
-    if curl -fsSL "${GITHUB_RAW}/templates/login.html" -o /opt/hex-webpanel/templates/login.html 2>/dev/null; then
-        ui_ok "login.html atualizado"
+    if hex_obter_manifesto; then
+        if hex_atualizar_templates; then
+            ui_info "Reiniciando Painel Web..."
+            systemctl restart hex-webpanel.service 2>/dev/null
+            ui_ok "Templates atualizados e painel reiniciado"
+        else
+            ui_error "Alguns templates não puderam ser atualizados"
+        fi
+        rm -f "$HEX_MANIFEST"
     else
-        ui_error "Erro ao baixar login.html"
-        success=false
+        ui_error "Não foi possível baixar o version.json"
     fi
-    
-    if curl -fsSL "${GITHUB_RAW}/templates/dashboard.html" -o /opt/hex-webpanel/templates/dashboard.html 2>/dev/null; then
-        ui_ok "dashboard.html atualizado"
-    else
-        ui_error "Erro ao baixar dashboard.html"
-        success=false
-    fi
-    
-    if [ "$success" = true ]; then
-        ui_info "Reiniciando Painel Web..."
-        systemctl restart hex-webpanel.service 2>/dev/null
-        ui_ok "Templates atualizados e painel reiniciado"
-    else
-        ui_error "Alguns templates não puderam ser atualizados"
-    fi
-    
     ui_fila ""; pause_return
     menu_atualizacoes
 }
 
 atualizar_backend() {
     clear; ui_top; ui_titulo "ATUALIZAR BACKEND"; ui_sep; ui_fila ""
-    
-    if [ ! -f "/opt/hex-webpanel/app.py" ]; then
-        ui_error "O Painel Web não está instalado"
-        pause_return
-        menu_atualizacoes
-        return
-    fi
-    
-    ui_info "Baixando novo backend..."
-    
-    cp /opt/hex-webpanel/app.py /opt/hex-webpanel/app.py.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null
-    
-    if curl -fsSL "${GITHUB_RAW}/app.py" -o /tmp/app_new.py 2>/dev/null; then
-        if python3 -m py_compile /tmp/app_new.py 2>/dev/null; then
-            mv /tmp/app_new.py /opt/hex-webpanel/app.py
+    if hex_obter_manifesto; then
+        if hex_atualizar_backend; then
             ui_info "Reiniciando Painel Web..."
             systemctl restart hex-webpanel.service 2>/dev/null
-            ui_ok "Backend atualizado com sucesso"
-        else
-            ui_error "O arquivo baixado contém erros de sintaxe"
-            ui_info "A atualização não foi aplicada"
-            rm -f /tmp/app_new.py
+            ui_ok "Painel Web reiniciado"
         fi
+        rm -f "$HEX_MANIFEST"
     else
-        ui_error "Erro ao baixar o backend"
+        ui_error "Não foi possível baixar o version.json"
     fi
-    
     ui_fila ""; pause_return
     menu_atualizacoes
 }
 
 atualizar_tudo() {
     clear; ui_top; ui_titulo "ATUALIZAÇÃO COMPLETA"; ui_sep; ui_fila ""
-    
     echo -ne "  ${YELLOW}⚠ Isso atualizará o menu, templates e backend. Continuar? (s/n):${NC} "
     read -r confirm
-    
     if [ "$confirm" != "s" ] && [ "$confirm" != "S" ]; then
-        ui_info "Cancelado"
-        pause_return
-        menu_atualizacoes
-        return
+        ui_info "Cancelado"; pause_return; menu_atualizacoes; return
     fi
-    
-    ui_info "Iniciando atualização completa..."
-    ui_fila ""
-    
+    if ! hex_obter_manifesto; then
+        ui_error "Não foi possível baixar o version.json"; pause_return; menu_atualizacoes; return
+    fi
     ui_info "[1/3] Atualizando menu..."
-    cp /usr/local/bin/hex_menu /usr/local/bin/hex_menu.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null
-    if curl -fsSL "${GITHUB_RAW}/hex_menu.sh" -o /tmp/hex_menu_new.sh 2>/dev/null; then
-        if bash -n /tmp/hex_menu_new.sh 2>/dev/null; then
-            mv /tmp/hex_menu_new.sh /usr/local/bin/hex_menu
-            chmod +x /usr/local/bin/hex_menu
-            ui_ok "Menu atualizado"
-            
-            if curl -fsSL "${GITHUB_RAW}/version.json" -o /tmp/version_new.json 2>/dev/null; then
-                local new_version=$(grep -o '"version": *"[^"]*"' /tmp/version_new.json | head -1 | cut -d'"' -f4)
-                if [ -n "$new_version" ]; then
-                    echo "$new_version" > "$VERSION_FILE"
-                    ui_ok "Versão atualizada para $new_version"
-                fi
-                rm -f /tmp/version_new.json
-            fi
-        else
-            ui_error "Erro de sintaxe no menu baixado"
-        fi
-    else
-        ui_error "Erro ao atualizar o menu"
-    fi
-    
-    if [ -d "/opt/hex-webpanel" ]; then
-        ui_info "[2/3] Atualizando templates..."
-        local backup_dir="/opt/hex-webpanel/templates.backup.$(date +%Y%m%d_%H%M%S)"
-        mkdir -p "$backup_dir"
-        cp -r /opt/hex-webpanel/templates/* "$backup_dir/" 2>/dev/null
-        
-        curl -fsSL "${GITHUB_RAW}/templates/login.html" -o /opt/hex-webpanel/templates/login.html 2>/dev/null && ui_ok "login.html atualizado" || ui_error "Erro no login.html"
-        curl -fsSL "${GITHUB_RAW}/templates/dashboard.html" -o /opt/hex-webpanel/templates/dashboard.html 2>/dev/null && ui_ok "dashboard.html atualizado" || ui_error "Erro no dashboard.html"
-        
-        ui_info "[3/3] Atualizando backend..."
-        cp /opt/hex-webpanel/app.py /opt/hex-webpanel/app.py.backup.$(date +%Y%m%d_%H%M%S) 2>/dev/null
-        if curl -fsSL "${GITHUB_RAW}/app.py" -o /tmp/app_new.py 2>/dev/null; then
-            if python3 -m py_compile /tmp/app_new.py 2>/dev/null; then
-                mv /tmp/app_new.py /opt/hex-webpanel/app.py
-                ui_ok "Backend atualizado"
-            else
-                ui_error "Erro de sintaxe no backend"
-            fi
-        else
-            ui_error "Erro ao atualizar backend"
-        fi
-        
+    hex_atualizar_menu && hex_escrever_versao
+    if [ -d /opt/hex-webpanel ]; then
+        ui_info "[2/3] Atualizando templates..."; hex_atualizar_templates
+        ui_info "[3/3] Atualizando backend...";   hex_atualizar_backend
         ui_info "Reiniciando Painel Web..."
         systemctl restart hex-webpanel.service 2>/dev/null
         ui_ok "Painel Web reiniciado"
@@ -374,12 +401,10 @@ atualizar_tudo() {
         ui_info "[2/3] Painel Web não instalado, ignorando..."
         ui_info "[3/3] Painel Web não instalado, ignorando..."
     fi
-    
-    ui_fila ""
-    ui_ok "Atualização completa finalizada"
-    ui_fila "  ${YELLOW}⚠ Reinicie o menu para aplicar todas as mudanças${NC}"
-    ui_fila "  ${GRIS}Backups salvos em arquivos .backup.*${NC}"
-    
+    rm -f "$HEX_MANIFEST"
+    ui_fila ""; ui_ok "Atualização completa finalizada"
+    ui_fila " ${YELLOW}⚠ Reinicie o menu para aplicar todas as mudanças${NC}"
+    ui_fila " ${GRIS}Backups salvos em arquivos .backup.*${NC}"
     ui_fila ""; pause_return
     menu_atualizacoes
 }
@@ -594,9 +619,12 @@ generico_adicionar_porta() {
     ss -tuln | grep -q ":$new_port " && { echo -e "  ${RED}✗ A porta já está em uso${NC}"; pause_return; return; }
     
     echo "$new_port" >> "$conf"
-    iptables -I INPUT -p $proto --dport $new_port -j ACCEPT 2>/dev/null
-    [ "$proto" == "udp" ] && iptables -I INPUT -p tcp --dport $new_port -j ACCEPT 2>/dev/null
-    command -v ufw >/dev/null 2>&1 && { ufw allow $new_port/$proto >/dev/null 2>&1; [ "$proto" == "udp" ] && ufw allow $new_port/tcp >/dev/null 2>&1; }
+    # UDPGW escuta em 127.0.0.1 por padrão: só abre o firewall no modo público (/etc/hex/udpgw_public)
+    if [ "$svc" != "udpgw" ] || [ -f "$UDPGW_PUBLIC_FLAG" ]; then
+        iptables -C INPUT -p "$proto" --dport "$new_port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p "$proto" --dport "$new_port" -j ACCEPT 2>/dev/null
+        [ "$proto" == "udp" ] && { iptables -C INPUT -p tcp --dport "$new_port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "$new_port" -j ACCEPT 2>/dev/null; }
+        command -v ufw >/dev/null 2>&1 && { ufw allow "$new_port/$proto" >/dev/null 2>&1; [ "$proto" == "udp" ] && ufw allow "$new_port/tcp" >/dev/null 2>&1; }
+    fi
     
     systemctl enable "${svc}@${new_port}.service" >/dev/null 2>&1
     systemctl start "${svc}@${new_port}.service" 2>/dev/null
@@ -681,64 +709,17 @@ generico_controle_individual() {
 instalar_painel_web_automatico() {
     clear; ui_top; ui_titulo "INSTALANDO PAINEL WEB"; ui_sep; ui_fila ""
     ui_info "Este processo pode levar alguns minutos..."
-    ui_info "Instalando dependências do Python..."
-    apt-get update -y >/dev/null 2>&1
-    apt-get install -y python3 python3-pip python3-venv >/dev/null 2>&1
-    
-    ui_info "Criando ambiente virtual..."
-    mkdir -p /opt/hex-webpanel/templates
-    cd /opt/hex-webpanel || return
-    python3 -m venv venv >/dev/null 2>&1
-    source venv/bin/activate
-    pip install flask flask-login psutil bcrypt >/dev/null 2>&1
-    
-    [ -f "$WEBPANEL_PORT_FILE" ] || echo "9000" > "$WEBPANEL_PORT_FILE"
-    WEBPANEL_PORT=$(cat "$WEBPANEL_PORT_FILE")
-    
-    if ! curl -fsSL "${GITHUB_RAW}/app.py" -o /opt/hex-webpanel/app.py 2>/dev/null; then
-        ui_error "Não foi possível baixar app.py do GitHub"
-    fi
-    
-    ui_info "Baixando templates..."
-    curl -fsSL "${GITHUB_RAW}/templates/login.html" -o /opt/hex-webpanel/templates/login.html 2>/dev/null
-    curl -fsSL "${GITHUB_RAW}/templates/dashboard.html" -o /opt/hex-webpanel/templates/dashboard.html 2>/dev/null
-    
-    ui_info "Configurando serviço systemd..."
-    cat > /etc/systemd/system/hex-webpanel.service <<EOF
-[Unit]
-Description=Hex Web Panel
-After=network.target
-
-[Service]
-User=root
-WorkingDirectory=/opt/hex-webpanel
-Environment="PATH=/opt/hex-webpanel/venv/bin"
-ExecStart=/opt/hex-webpanel/venv/bin/python app.py
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    systemctl daemon-reload >/dev/null 2>&1
-    systemctl enable hex-webpanel.service >/dev/null 2>&1
-    
-    ui_info "Abrindo a porta $WEBPANEL_PORT no firewall..."
-    iptables -I INPUT -p tcp --dport $WEBPANEL_PORT -j ACCEPT 2>/dev/null
-    command -v ufw >/dev/null 2>&1 && ufw allow $WEBPANEL_PORT/tcp >/dev/null 2>&1
-    
-    ui_info "Iniciando Painel Web..."
-    systemctl start hex-webpanel.service
-    sleep 2
-    
-    if systemctl is-active --quiet hex-webpanel.service; then
-        ui_ok "Painel Web instalado e ativo"
-        ui_fila "  ${BOLD}URL:${NC} ${CYAN}http://$(hostname -I | awk '{print $1}'):$WEBPANEL_PORT${NC}"
-        ui_fila "  ${BOLD}Senha:${NC} ${YELLOW}admin26${NC} (Altere no dashboard)"
+    local wp
+    wp=$(mktemp) || return
+    if hex_obter_manifesto && hex_instalar_arquivo install_webpanel.sh "$wp" 755 sh; then
+        HEX_GITHUB_RAW="$GITHUB_RAW" bash "$wp" || ui_error "O instalador do painel terminou com erro"
+        rm -f "$HEX_MANIFEST"
     else
-        ui_error "O painel não pôde iniciar"
+        ui_error "Não foi possível obter o instalador do painel"
     fi
-    ui_fila ""; pause_return
+    rm -f "$wp"
+    WEBPANEL_PORT=$(cat "$WEBPANEL_PORT_FILE" 2>/dev/null || echo "9000")
+    pause_return
 }
 
 gerenciar_webpanel() {
@@ -860,19 +841,26 @@ adicionar_usuario() {
     clear; ui_top; ui_titulo "ADICIONAR USUÁRIO"; ui_sep
     getent group "$USER_GROUP" >/dev/null 2>&1 || groupadd "$USER_GROUP" 2>/dev/null
     echo ""; echo -ne "  ${WHITE}Usuário:${NC} "; read -r new_user
-    [[ "$new_user" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo -e "  ${RED}✗ Nome inválido${NC}"; pause_return; return; }
+    valid_username "$new_user" || { echo -e "  ${RED}✗ Nome inválido (minúsculas, números, _ e -)${NC}"; pause_return; return; }
     id "$new_user" >/dev/null 2>&1 && { echo -e "  ${RED}✗ Já existe${NC}"; pause_return; return; }
     echo -ne "  ${WHITE}Senha:${NC} "; read -rs new_pass; echo ""
-    [ -z "$new_pass" ] && { echo -e "  ${RED}✗ Vazia${NC}"; pause_return; return; }
+    valid_user_password "$new_pass" || { echo -e "  ${RED}✗ Senha inválida (4 a 64 caracteres, sem ':')${NC}"; pause_return; return; }
     echo -ne "  ${WHITE}Validade (dias):${NC} "; read -r days
-    [[ "$days" =~ ^[0-9]+$ ]] && [ "$days" -gt 0 ] || { echo -e "  ${RED}✗ Inválido${NC}"; pause_return; return; }
-    
+    [[ "$days" =~ ^[0-9]+$ ]] && [ "$days" -gt 0 ] && [ "$days" -le 3650 ] || { echo -e "  ${RED}✗ Inválido (1 a 3650)${NC}"; pause_return; return; }
+
     exp_date=$(date -d "+${days} days" +"%Y-%m-%d")
-    useradd -m -s /bin/bash -G "$USER_GROUP" "$new_user" 2>/dev/null
-    echo "$new_user:$new_pass" | chpasswd
+    user_shell=$(cat /etc/hex/user_shell 2>/dev/null)
+    case "$user_shell" in /bin/bash|/bin/sh|/bin/false|/usr/sbin/nologin) ;; *) user_shell=/bin/bash ;; esac
+    if ! useradd -m -s "$user_shell" -G "$USER_GROUP" "$new_user" 2>/dev/null; then
+        echo -e "  ${RED}✗ Erro ao criar o usuário${NC}"; pause_return; return
+    fi
+    if ! printf '%s:%s\n' "$new_user" "$new_pass" | chpasswd 2>/dev/null; then
+        userdel -r "$new_user" 2>/dev/null
+        echo -e "  ${RED}✗ Erro ao definir a senha${NC}"; pause_return; return
+    fi
     chage -E "$exp_date" "$new_user" && usermod -e "$exp_date" "$new_user"
-    echo "${new_user}:${new_pass}:${exp_date}" >> "$USER_DB"
-    
+    ( db_lock; printf '%s:%s:%s\n' "$new_user" "$new_pass" "$exp_date" >> "$USER_DB" )
+
     echo ""; echo -e "  ${GREEN}✓ Usuário criado${NC}"
     echo -e "  ${BOLD}IP:${NC} $(hostname -I | awk '{print $1}')"
     echo -e "  ${BOLD}Usuário:${NC} ${YELLOW}${new_user}${NC} | ${BOLD}Senha:${NC} ${YELLOW}${new_pass}${NC} | ${BOLD}Expira em:${NC} ${YELLOW}${exp_date}${NC}"; echo ""
@@ -883,10 +871,15 @@ remover_usuario() {
     clear; ui_top; ui_titulo "REMOVER USUÁRIO"; ui_sep
     [ ! -s "$USER_DB" ] && { echo -e "  ${YELLOW}Não há usuários${NC}"; pause_return; return; }
     echo ""; echo -e "  ${CYAN}Usuários ativos:${NC}"; echo ""
-    cat -n "$USER_DB" | awk -F: '{printf "    ${YELLOW}[%s]${NC} %s (Exp: %s)\n", NR, $1, $3}' | sed "s/\${YELLOW}/\x1b[38;5;221m/g; s/\${NC}/\x1b[0m/g"; echo ""
+    cat -n "$USER_DB" | awk -F: '{printf "    ${YELLOW}[%s]${NC} %s (Exp: %s)\n", NR, $1, $NF}' | sed "s/\${YELLOW}/\x1b[38;5;221m/g; s/\${NC}/\x1b[0m/g"; echo ""
     echo -ne "  ${WHITE}Usuário a remover:${NC} "; read -r del_user
-    id "$del_user" >/dev/null 2>&1 || { echo -e "  ${RED}✗ Não existe${NC}"; pause_return; return; }
-    userdel -r "$del_user" 2>/dev/null; sed -i "/^$del_user:/d" "$USER_DB"
+    valid_username "$del_user" && db_has "$del_user" || { echo -e "  ${RED}✗ Não é um usuário gerenciado por este menu${NC}"; pause_return; return; }
+    pkill -KILL -u "$del_user" 2>/dev/null
+    userdel -r "$del_user" 2>/dev/null
+    if id "$del_user" >/dev/null 2>&1; then
+        echo -e "  ${RED}✗ Não foi possível remover o usuário do sistema${NC}"; pause_return; return
+    fi
+    ( db_lock; db_update "$del_user" delete )
     echo -e "  ${GREEN}✓ Usuário removido${NC}"; pause_return
 }
 
@@ -975,12 +968,12 @@ mudar_senha_usuario() {
     echo -ne "  ${WHITE}Usuário a modificar:${NC} "
     read -r target_user
     
-    if ! id "$target_user" >/dev/null 2>&1; then
+    if ! valid_username "$target_user" || ! id "$target_user" >/dev/null 2>&1; then
         echo -e "  ${RED}✗ O usuário '$target_user' não existe no sistema${NC}"
         pause_return; return
     fi
     
-    if ! grep -q "^${target_user}:" "$USER_DB"; then
+    if ! db_has "$target_user"; then
         echo -e "  ${RED}✗ O usuário '$target_user' não está no banco de dados${NC}"
         pause_return; return
     fi
@@ -1001,8 +994,11 @@ mudar_senha_usuario() {
         pause_return; return
     fi
     
-    if echo "${target_user}:${new_pass}" | chpasswd 2>/dev/null; then
-        sed -i "s/^${target_user}:[^:]*:/${target_user}:${new_pass}:/" "$USER_DB"
+    if ! valid_user_password "$new_pass"; then
+        echo -e "  ${RED}✗ Senha inválida (4 a 64 caracteres, sem ':')${NC}"; pause_return; return
+    fi
+    if printf '%s:%s\n' "$target_user" "$new_pass" | chpasswd 2>/dev/null; then
+        ( db_lock; db_update "$target_user" pass "$new_pass" )
         echo -e "  ${GREEN}✓ Senha de '$target_user' alterada com sucesso${NC}"
         echo -e "  ${GRIS}O usuário pode acessar com a nova senha${NC}"
     else
@@ -1044,17 +1040,17 @@ mudar_expiracao_usuario() {
     echo -ne "  ${WHITE}Usuário a modificar:${NC} "
     read -r target_user
     
-    if ! id "$target_user" >/dev/null 2>&1; then
+    if ! valid_username "$target_user" || ! id "$target_user" >/dev/null 2>&1; then
         echo -e "  ${RED}✗ O usuário '$target_user' não existe no sistema${NC}"
         pause_return; return
     fi
     
-    if ! grep -q "^${target_user}:" "$USER_DB"; then
+    if ! db_has "$target_user"; then
         echo -e "  ${RED}✗ O usuário '$target_user' não está no banco de dados${NC}"
         pause_return; return
     fi
     
-    current_exp=$(grep "^${target_user}:" "$USER_DB" | cut -d: -f3)
+    current_exp=$(awk -F':' -v u="$target_user" '$1==u{print $NF}' "$USER_DB")
     echo ""
     echo -e "  ${BOLD}Data atual de expiração:${NC} ${YELLOW}$current_exp${NC}"
     echo ""
@@ -1080,7 +1076,7 @@ mudar_expiracao_usuario() {
         6)
             echo -ne "  ${WHITE}Nova data (YYYY-MM-DD):${NC} "
             read -r custom_date
-            if ! [[ "$custom_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]]; then
+            if ! [[ "$custom_date" =~ ^[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || ! date -d "$custom_date" >/dev/null 2>&1; then
                 echo -e "  ${RED}✗ Formato inválido. Use YYYY-MM-DD${NC}"
                 pause_return; return
             fi
@@ -1089,7 +1085,7 @@ mudar_expiracao_usuario() {
         7)
             if chage -E -1 "$target_user" 2>/dev/null && usermod -e '' "$target_user" 2>/dev/null; then
                 new_exp="2099-12-31"
-                sed -i "s/^${target_user}:\([^:]*\):.*/${target_user}:\1:${new_exp}/" "$USER_DB"
+                ( db_lock; db_update "$target_user" exp "$new_exp" )
                 echo -e "  ${GREEN}✓ Expiração removida. O usuário '$target_user' agora é permanente${NC}"
             else
                 echo -e "  ${RED}✗ Erro ao remover a expiração${NC}"
@@ -1110,7 +1106,7 @@ mudar_expiracao_usuario() {
     fi
     
     if chage -E "$new_exp" "$target_user" 2>/dev/null && usermod -e "$new_exp" "$target_user" 2>/dev/null; then
-        sed -i "s/^${target_user}:\([^:]*\):.*/${target_user}:\1:${new_exp}/" "$USER_DB"
+        ( db_lock; db_update "$target_user" exp "$new_exp" )
         echo ""
         echo -e "  ${GREEN}✓ Data de expiração atualizada${NC}"
         echo -e "  ${BOLD}Usuário:${NC}    ${YELLOW}$target_user${NC}"
@@ -1163,7 +1159,7 @@ desinstalar() {
         echo -e "  ${CYAN}Removendo arquivos...${NC}"
         rm -f /etc/systemd/system/bhttp@.service /etc/systemd/system/hcr@.service /etc/systemd/system/udpgw@.service
         rm -rf /opt/bhttp /opt/hcr /opt/udpgw /etc/bhttp /etc/hcr /etc/hex
-        rm -f /usr/local/bin/hex_menu /usr/bin/hex_menu /usr/local/bin/hex_cleanup.sh /var/log/hex-cleanup.log
+        rm -f /usr/local/bin/hex_menu /usr/bin/hex_menu /usr/local/bin/bhttp /usr/local/bin/hcr /usr/local/bin/hex_cleanup.sh /var/log/hex-cleanup.log
         
         echo -e "  ${CYAN}Removendo usuários hexusers...${NC}"
         getent group "$USER_GROUP" >/dev/null 2>&1 && { for user in $(getent group "$USER_GROUP" | cut -d: -f4 | tr ',' '\n'); do userdel -r "$user" 2>/dev/null; done; groupdel "$USER_GROUP" 2>/dev/null; }

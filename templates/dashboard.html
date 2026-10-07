@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html lang="pt-BR" data-bs-theme="dark">
+<html lang="es" data-bs-theme="dark">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>Dashboard</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
@@ -992,67 +993,67 @@
             100% { transform: scale(1); opacity: 1; }
         }
         
-        /* Tabela temática que responde aos temas */
-        .table-theme {
-            background-color: var(--bg-secondary);
-            color: var(--text-primary);
-            border-color: var(--border-color);
-        }
-        .table-theme thead th {
-            background-color: var(--bg-tertiary);
-            color: var(--text-primary);
-            border-bottom: 2px solid var(--border-color);
-            font-weight: 600;
-        }
-        .table-theme tbody td {
-            background-color: var(--bg-secondary);
-            color: var(--text-primary);
-            border-color: var(--border-color);
-        }
-        .table-theme tbody tr:hover td {
-            background-color: var(--bg-tertiary);
-        }
+        /* Tabla temática que responde a los temas */
+.table-theme {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+.table-theme thead th {
+    background-color: var(--bg-tertiary);
+    color: var(--text-primary);
+    border-bottom: 2px solid var(--border-color);
+    font-weight: 600;
+}
+.table-theme tbody td {
+    background-color: var(--bg-secondary);
+    color: var(--text-primary);
+    border-color: var(--border-color);
+}
+.table-theme tbody tr:hover td {
+    background-color: var(--bg-tertiary);
+}
 
-        /* Ajustes específicos para modo claro */
-        [data-theme="light"] .table-theme {
-            background-color: #ffffff;
-            color: #1d1d1f;
-        }
-        [data-theme="light"] .table-theme thead th {
-            background-color: #f5f5f7;
-            color: #1d1d1f;
-            border-bottom: 2px solid #d2d2d7;
-        }
-        [data-theme="light"] .table-theme tbody td {
-            background-color: #ffffff;
-            color: #1d1d1f;
-            border-color: #d2d2d7;
-        }
-        [data-theme="light"] .table-theme tbody tr:hover td {
-            background-color: #f5f5f7;
-        }
+/* Ajustes específicos para modo claro */
+[data-theme="light"] .table-theme {
+    background-color: #ffffff;
+    color: #1d1d1f;
+}
+[data-theme="light"] .table-theme thead th {
+    background-color: #f5f5f7;
+    color: #1d1d1f;
+    border-bottom: 2px solid #d2d2d7;
+}
+[data-theme="light"] .table-theme tbody td {
+    background-color: #ffffff;
+    color: #1d1d1f;
+    border-color: #d2d2d7;
+}
+[data-theme="light"] .table-theme tbody tr:hover td {
+    background-color: #f5f5f7;
+}
 
-        /* Ajustes específicos para modo gaming */
-        [data-theme="gaming"] .table-theme {
-            background-color: rgba(26, 0, 51, 0.9);
-            color: #00ffff;
-            border-color: #ff00ff;
-        }
-        [data-theme="gaming"] .table-theme thead th {
-            background-color: rgba(45, 0, 82, 0.9);
-            color: #00ffff;
-            border-bottom: 2px solid #ff00ff;
-            text-shadow: 0 0 5px #00ffff;
-        }
-        [data-theme="gaming"] .table-theme tbody td {
-            background-color: rgba(26, 0, 51, 0.9);
-            color: #00ffff;
-            border-color: #ff00ff;
-        }
-        [data-theme="gaming"] .table-theme tbody tr:hover td {
-            background-color: rgba(255, 0, 255, 0.1);
-            box-shadow: inset 0 0 10px rgba(0, 255, 255, 0.2);
-        }
+/* Ajustes específicos para modo gaming */
+[data-theme="gaming"] .table-theme {
+    background-color: rgba(26, 0, 51, 0.9);
+    color: #00ffff;
+    border-color: #ff00ff;
+}
+[data-theme="gaming"] .table-theme thead th {
+    background-color: rgba(45, 0, 82, 0.9);
+    color: #00ffff;
+    border-bottom: 2px solid #ff00ff;
+    text-shadow: 0 0 5px #00ffff;
+}
+[data-theme="gaming"] .table-theme tbody td {
+    background-color: rgba(26, 0, 51, 0.9);
+    color: #00ffff;
+    border-color: #ff00ff;
+}
+[data-theme="gaming"] .table-theme tbody tr:hover td {
+    background-color: rgba(255, 0, 255, 0.1);
+    box-shadow: inset 0 0 10px rgba(0, 255, 255, 0.2);
+}
         footer {
             color: var(--text-muted);
             font-size: 12px;
@@ -1071,7 +1072,7 @@
             .toast-notification { min-width: auto; }
         }
         
-        /* ═══ WIDGETS DE MONITORAMENTO ══ */
+        /* ═══ WIDGETS DE MONITOREO ══ */
         .monitor-widget {
             background: var(--bg-secondary);
             border: 1px solid var(--border-color);
@@ -1185,32 +1186,32 @@
                     <i class="bi bi-arrow-repeat"></i>
                 </button>
                 <div style="position: relative;">
-                    <button class="nav-btn" id="btnTheme" onclick="toggleThemeDropdown()" title="Alterar tema">
+                    <button class="nav-btn" id="btnTheme" onclick="toggleThemeDropdown()" title="Cambiar tema">
                         <i class="bi bi-palette-fill"></i>
                     </button>
-                    <div class="theme-dropdown" id="themeDropdown">
-                        <div class="theme-option" data-theme="dark" onclick="setTheme('dark')">
-                            <i class="bi bi-moon-fill"></i>
-                            <span>Modo Escuro</span>
-                        </div>
-                        <div class="theme-option" data-theme="light" onclick="setTheme('light')">
-                            <i class="bi bi-sun-fill"></i>
-                            <span>Modo Claro</span>
-                        </div>
-                        <div class="theme-option" data-theme="paper" onclick="setTheme('paper')">
-                            <i class="bi bi-house"></i>
-                            <span>Modo Privado</span>
-                        </div>
-                        <div class="theme-option" data-theme="gaming" onclick="setTheme('gaming')">
-                            <i class="bi bi-controller"></i>
-                            <span>Modo Gaming</span>
-                        </div>
-                    </div>
-                </div>
-                <button class="nav-btn" onclick="openPasswordModal()" title="Alterar senha">
+                 <div class="theme-dropdown" id="themeDropdown">
+    <div class="theme-option" data-theme="dark" onclick="setTheme('dark')">
+        <i class="bi bi-moon-fill"></i>
+        <span>Modo Oscuro</span>
+    </div>
+    <div class="theme-option" data-theme="light" onclick="setTheme('light')">
+        <i class="bi bi-sun-fill"></i>
+        <span>Modo Claro</span>
+    </div>
+    <div class="theme-option" data-theme="paper" onclick="setTheme('paper')">
+        <i class="bi bi-house"></i>
+        <span>Modo Privado </span>
+    </div>
+    <div class="theme-option" data-theme="gaming" onclick="setTheme('gaming')">
+        <i class="bi bi-controller"></i>
+        <span>Modo Gaming</span>
+    </div>
+</div>
+</div>
+                <button class="nav-btn" onclick="openPasswordModal()" title="Cambiar contraseña">
                     <i class="bi bi-key-fill"></i>
                 </button>
-                <a href="/logout" class="nav-btn" title="Sair">
+                <a href="#" onclick="return postAction('/logout')" class="nav-btn" title="Cerrar sesión">
                     <i class="bi bi-box-arrow-right"></i>
                 </a>
             </div>
@@ -1230,13 +1231,13 @@
         {% if stats.update_info.has_update %}
         <div class="version-pill has-update">
             <i class="bi bi-stars"></i>
-            <span>Nova versão:</span>
+            <span>Nueva versión:</span>
             <span class="version-badge">v{{ stats.update_info.remote_version }}</span>
             <span style="color: var(--text-secondary);">·</span>
-            <span style="color: var(--text-secondary);">Atual: v{{ stats.update_info.local_version }}</span>
+            <span style="color: var(--text-secondary);">Actual: v{{ stats.update_info.local_version }}</span>
             {% if stats.update_info.changelog %}
             <div class="changelog-tooltip">
-                <div class="changelog-tooltip-title"><i class="bi bi-card-list"></i> Novidades</div>
+                <div class="changelog-tooltip-title"><i class="bi bi-card-list"></i> Novedades</div>
                 {{ stats.update_info.changelog }}
             </div>
             {% endif %}
@@ -1244,11 +1245,11 @@
         {% elif not stats.update_info.error %}
         <div class="version-pill updated">
             <i class="bi bi-patch-check-fill"></i>
-            <span>Sistema atualizado  •  <strong>v{{ stats.update_info.local_version }}</strong></span>
+            <span>Sistema actualizado  •  <strong>v{{ stats.update_info.local_version }}</strong></span>
         </div>
         {% endif %}
         
-        <!-- ═══ WIDGETS DE MONITORAMENTO DO SISTEMA ═══ -->
+        <!-- ═══ WIDGETS DE MONITOREO DEL SISTEMA ═══ -->
         <div class="row g-3 mb-4">
             <!-- CPU -->
             <div class="col-12 col-md-4">
@@ -1260,7 +1261,7 @@
                             </div>
                             <span>CPU</span>
                         </div>
-                        <span class="badge bg-{{ stats.system_stats.cpu.color }}">{{ stats.system_stats.cpu.cores }} núcleos</span>
+                        <span class="badge bg-{{ stats.system_stats.cpu.color }}">{{ stats.system_stats.cpu.cores }} cores</span>
                     </div>
                     <div class="monitor-value">
                         {{ stats.system_stats.cpu.percent }}%
@@ -1270,7 +1271,7 @@
                              style="width: {{ stats.system_stats.cpu.percent }}%"></div>
                     </div>
                     <div class="monitor-details">
-                        <span>Uso do processador</span>
+                        <span>Uso del procesador</span>
                         <span>{{ stats.system_stats.cpu.cores }} núcleos</span>
                     </div>
                 </div>
@@ -1333,16 +1334,16 @@
         
         <div class="section-header">
             <h5 class="section-title">
-                <i class="bi bi-hdd-network"></i> Serviços Ativos
+                <i class="bi bi-hdd-network"></i> Servicios Activos
             </h5>
             <div class="section-controls">
                 <div id="autoRefreshIndicator" class="auto-refresh-indicator" style="display: none;">
                     <span class="dot"></span>
-                    <span>Atualizando em <span id="refreshCountdown">30</span>s</span>
+                    <span>Actualizando en <span id="refreshCountdown">30</span>s</span>
                 </div>
                 {% if stats.update_info.has_update %}
                 <button class="btn-update-compact" id="btnUpdateNow" onclick="startUpdate()">
-                    <i class="bi bi-cloud-download"></i> Atualizar Agora
+                    <i class="bi bi-cloud-download"></i> Actualizar Ahora
                 </button>
                 {% endif %}
             </div>
@@ -1365,15 +1366,15 @@
                         </h5>
                         <span class="badge bg-success">{{ stats.bhttp_active }}/{{ stats.bhttp_ports|length }}</span>
                     </div>
-                    <div class="mb-3"><small class="text-muted">Portas:</small>
+                    <div class="mb-3"><small class="text-muted">Puertos:</small>
                         <div class="d-flex flex-wrap gap-1 mt-1">
-                            {% for p in stats.bhttp_ports %}<span class="badge bg-secondary">{{ p }}</span>{% else %}<span class="text-muted small">Nenhuma</span>{% endfor %}
+                            {% for p in stats.bhttp_ports %}<span class="badge bg-secondary">{{ p }}</span>{% else %}<span class="text-muted small">Ninguno</span>{% endfor %}
                         </div>
                     </div>
                     <div class="d-flex gap-2">
-                        <a href="/control_service/bhttp/start" class="btn btn-sm btn-outline-success flex-fill" onclick="return confirm('Iniciar BHTTP?')"><i class="bi bi-play-fill"></i></a>
-                        <a href="/control_service/bhttp/stop" class="btn btn-sm btn-outline-warning flex-fill" onclick="return confirm('Parar BHTTP?')"><i class="bi bi-stop-fill"></i></a>
-                        <a href="/control_service/bhttp/restart" class="btn btn-sm btn-outline-info flex-fill" onclick="return confirm('Reiniciar BHTTP?')"><i class="bi bi-arrow-clockwise"></i></a>
+                        <a href="#" class="btn btn-sm btn-outline-success flex-fill" onclick="return postAction('/control_service/bhttp/start', '¿Iniciar BHTTP?')"><i class="bi bi-play-fill"></i></a>
+                        <a href="#" class="btn btn-sm btn-outline-warning flex-fill" onclick="return postAction('/control_service/bhttp/stop', '¿Detener BHTTP?')"><i class="bi bi-stop-fill"></i></a>
+                        <a href="#" class="btn btn-sm btn-outline-info flex-fill" onclick="return postAction('/control_service/bhttp/restart', '¿Reiniciar BHTTP?')"><i class="bi bi-arrow-clockwise"></i></a>
                     </div>
                 </div></div>
             </div>
@@ -1393,15 +1394,15 @@
                         </h5>
                         <span class="badge bg-info text-dark">{{ stats.hcr_active }}/{{ stats.hcr_ports|length }}</span>
                     </div>
-                    <div class="mb-3"><small class="text-muted">Portas:</small>
+                    <div class="mb-3"><small class="text-muted">Puertos:</small>
                         <div class="d-flex flex-wrap gap-1 mt-1">
-                            {% for p in stats.hcr_ports %}<span class="badge bg-secondary">{{ p }}</span>{% else %}<span class="text-muted small">Nenhuma</span>{% endfor %}
+                            {% for p in stats.hcr_ports %}<span class="badge bg-secondary">{{ p }}</span>{% else %}<span class="text-muted small">Ninguno</span>{% endfor %}
                         </div>
                     </div>
                     <div class="d-flex gap-2">
-                        <a href="/control_service/hcr/start" class="btn btn-sm btn-outline-success flex-fill" onclick="return confirm('Iniciar HCR?')"><i class="bi bi-play-fill"></i></a>
-                        <a href="/control_service/hcr/stop" class="btn btn-sm btn-outline-warning flex-fill" onclick="return confirm('Parar HCR?')"><i class="bi bi-stop-fill"></i></a>
-                        <a href="/control_service/hcr/restart" class="btn btn-sm btn-outline-info flex-fill" onclick="return confirm('Reiniciar HCR?')"><i class="bi bi-arrow-clockwise"></i></a>
+                        <a href="#" class="btn btn-sm btn-outline-success flex-fill" onclick="return postAction('/control_service/hcr/start', '¿Iniciar HCR?')"><i class="bi bi-play-fill"></i></a>
+                        <a href="#" class="btn btn-sm btn-outline-warning flex-fill" onclick="return postAction('/control_service/hcr/stop', '¿Detener HCR?')"><i class="bi bi-stop-fill"></i></a>
+                        <a href="#" class="btn btn-sm btn-outline-info flex-fill" onclick="return postAction('/control_service/hcr/restart', '¿Reiniciar HCR?')"><i class="bi bi-arrow-clockwise"></i></a>
                     </div>
                 </div></div>
             </div>
@@ -1421,15 +1422,15 @@
                         </h5>
                         <span class="badge bg-warning text-dark">{{ stats.udpgw_active }}/{{ stats.udpgw_ports|length }}</span>
                     </div>
-                    <div class="mb-3"><small class="text-muted">Portas:</small>
+                    <div class="mb-3"><small class="text-muted">Puertos:</small>
                         <div class="d-flex flex-wrap gap-1 mt-1">
-                            {% for p in stats.udpgw_ports %}<span class="badge bg-secondary">{{ p }}</span>{% else %}<span class="text-muted small">Nenhuma</span>{% endfor %}
+                            {% for p in stats.udpgw_ports %}<span class="badge bg-secondary">{{ p }}</span>{% else %}<span class="text-muted small">Ninguno</span>{% endfor %}
                         </div>
                     </div>
                     <div class="d-flex gap-2">
-                        <a href="/control_service/udpgw/start" class="btn btn-sm btn-outline-success flex-fill" onclick="return confirm('Iniciar UDPGW?')"><i class="bi bi-play-fill"></i></a>
-                        <a href="/control_service/udpgw/stop" class="btn btn-sm btn-outline-warning flex-fill" onclick="return confirm('Parar UDPGW?')"><i class="bi bi-stop-fill"></i></a>
-                        <a href="/control_service/udpgw/restart" class="btn btn-sm btn-outline-info flex-fill" onclick="return confirm('Reiniciar UDPGW?')"><i class="bi bi-arrow-clockwise"></i></a>
+                        <a href="#" class="btn btn-sm btn-outline-success flex-fill" onclick="return postAction('/control_service/udpgw/start', '¿Iniciar UDPGW?')"><i class="bi bi-play-fill"></i></a>
+                        <a href="#" class="btn btn-sm btn-outline-warning flex-fill" onclick="return postAction('/control_service/udpgw/stop', '¿Detener UDPGW?')"><i class="bi bi-stop-fill"></i></a>
+                        <a href="#" class="btn btn-sm btn-outline-info flex-fill" onclick="return postAction('/control_service/udpgw/restart', '¿Reiniciar UDPGW?')"><i class="bi bi-arrow-clockwise"></i></a>
                     </div>
                 </div></div>
             </div>
@@ -1440,19 +1441,19 @@
                 <div class="card"><div class="card-body">
                     <div class="d-flex flex-column flex-sm-row justify-content-between align-items-start align-items-sm-center mb-3 gap-2">
                         <h5 class="card-title mb-0">
-                            <i class="bi bi-people-fill text-success"></i> Total de Usuários
+                            <i class="bi bi-people-fill text-success"></i> Usuarios Totales
                             <span class="badge bg-secondary ms-1">{{ stats.users }}</span>
                         </h5>
                         <button type="button" class="btn btn-add-user" data-bs-toggle="modal" data-bs-target="#addUserModal">
-                            <i class="bi bi-person-plus-fill me-1"></i> Criar Usuário
+                            <i class="bi bi-person-plus-fill me-1"></i> Crear Usuario
                         </button>
                     </div>
                     <div class="table-responsive">
                         <table class="table table-theme table-hover table-sm align-middle mb-0">
                             <thead><tr>
-                                <th><i class="bi bi-person-circle"></i> Usuário</th>
-                                <th><i class="bi bi-calendar-event"></i> Expiração</th>
-                                <th class="text-end"><i class="bi bi-gear"></i> Ação</th>
+                                <th><i class="bi bi-person-circle"></i> Usuario</th>
+                                <th><i class="bi bi-calendar-event"></i> Expiración</th>
+                                <th class="text-end"><i class="bi bi-gear"></i> Acción</th>
                             </tr></thead>
                             <tbody>
                                 {% for u in users %}
@@ -1461,22 +1462,22 @@
                                     <td><span class="badge bg-secondary">{{ u.exp }}</span></td>
                                     <td class="text-end">
                                         <div class="d-flex gap-1 justify-content-end flex-wrap">
-                                            <button class="btn btn-sm btn-outline-warning" onclick="openEditPasswordModal('{{ u.user }}')" title="Alterar senha">
+                                            <button class="btn btn-sm btn-outline-warning" onclick="openEditPasswordModal('{{ u.user }}')" title="Cambiar contraseña">
                                                 <i class="bi bi-key"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-outline-info" onclick="openEditExpiryModal('{{ u.user }}', '{{ u.exp }}')" title="Alterar expiração">
+                                            <button class="btn btn-sm btn-outline-info" onclick="openEditExpiryModal('{{ u.user }}', '{{ u.exp }}')" title="Cambiar expiración">
                                                 <i class="bi bi-calendar-event"></i>
                                             </button>
-                                            <button class="btn btn-sm btn-outline-danger" onclick="if(confirm('Excluir {{ u.user }}?')) window.location.href='/delete_user/{{ u.user }}'" title="Remover usuário">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
+                                            <button class="btn btn-sm btn-outline-danger" onclick="return postAction('/delete_user/{{ u.user }}', '¿Eliminar a {{ u.user }}?')" title="Eliminar usuario">
+            <i class="bi bi-trash"></i>
+        </button>
                                         </div>
                                     </td>
                                 </tr>
                                 {% else %}
                                 <tr><td colspan="3" class="text-center text-muted py-4">
                                     <i class="bi bi-inbox" style="font-size: 2rem;"></i><br>
-                                    Nenhum usuário registrado.
+                                    No hay usuarios registrados.
                                 </td></tr>
                                 {% endfor %}
                             </tbody>
@@ -1494,73 +1495,75 @@
                 <strong>Web Manager</strong> v{{ stats.update_info.local_version }}
             </p>
             <p class="mb-0">
-                &copy;  <a href="" target="_blank">2026</a> · Todos os direitos reservados
+                &copy;  <a href="" target="_blank">2026</a> · Todos los derechos reservados
             </p>
         </div>
     </footer>
     
-    <!-- Modal Adicionar Usuário -->
+    <!-- Modal Agregar Usuario -->
     <div class="modal fade" id="addUserModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-person-plus-fill"></i> Novo Usuário</h5>
+                    <h5 class="modal-title"><i class="bi bi-person-plus-fill"></i> Nuevo Usuario</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form action="/add_user" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-person"></i> Nome de usuário</label>
-                            <input type="text" class="form-control" name="username" placeholder="ex: joao_silva" required pattern="[a-z0-9_-]+" autocomplete="off">
-                            <small class="text-muted">Apenas letras minúsculas, números, _ e -</small>
+                            <label class="form-label"><i class="bi bi-person"></i> Nombre de usuario</label>
+                            <input type="text" class="form-control" name="username" placeholder="ej: juan_perez" required pattern="[a-z0-9_-]+" autocomplete="off">
+                            <small class="text-muted">Solo minúsculas, números, _ y -</small>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-key"></i> Senha</label>
-                            <input type="text" class="form-control" name="password" placeholder="Senha segura" required autocomplete="off">
+                            <label class="form-label"><i class="bi bi-key"></i> Contraseña</label>
+                            <input type="text" class="form-control" name="password" placeholder="Contraseña segura" required autocomplete="off">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-calendar3"></i> Dias de validade</label>
+                            <label class="form-label"><i class="bi bi-calendar3"></i> Días de validez</label>
                             <input type="number" class="form-control" name="days" placeholder="30" min="1" value="30" required>
-                            <small class="text-muted">O usuário expirará automaticamente</small>
+                            <small class="text-muted">El usuario expirará automáticamente</small>
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Cancelar</button>
-                        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle-fill"></i> Criar </button>
+                        <button type="submit" class="btn btn-success"><i class="bi bi-check-circle-fill"></i> Crear </button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
     
-    <!-- Modal Alterar Senha Admin -->
+    <!-- Modal Cambiar Contraseña Admin -->
     <div class="modal fade" id="changePasswordModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-shield-lock-fill"></i> Alterar Senha</h5>
+                    <h5 class="modal-title"><i class="bi bi-shield-lock-fill"></i> Cambiar Contraseña</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form action="/change_password" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="modal-body">
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-lock-fill"></i> Senha atual</label>
+                            <label class="form-label"><i class="bi bi-lock-fill"></i> Contraseña actual</label>
                             <input type="password" class="form-control" name="current_password" required autocomplete="current-password">
                         </div>
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-key-fill"></i> Nova senha</label>
+                            <label class="form-label"><i class="bi bi-key-fill"></i> Nueva contraseña</label>
                             <input type="password" class="form-control" name="new_password" required minlength="4" autocomplete="new-password">
-                            <small class="text-muted">Mínimo de 4 caracteres</small>
+                            <small class="text-muted">Mínimo 4 caracteres</small>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-key-fill"></i> Confirmar nova senha</label>
+                            <label class="form-label"><i class="bi bi-key-fill"></i> Confirmar nueva contraseña</label>
                             <input type="password" class="form-control" name="confirm_password" required minlength="4" autocomplete="new-password">
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Cancelar</button>
                         <button type="submit" class="btn btn-success">
-                            <i class="bi bi-check-circle-fill"></i> Alterar
+                            <i class="bi bi-check-circle-fill"></i> Cambiar
                         </button>
                     </div>
                 </form>
@@ -1568,79 +1571,81 @@
         </div>
     </div>
     
-    <!-- Modal Alterar Senha de Usuário -->
+    <!-- Modal Cambiar Contraseña de Usuario -->
     <div class="modal fade" id="editPasswordModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-key-fill"></i> Editar Senha do Usuário</h5>
+                    <h5 class="modal-title"><i class="bi bi-key-fill"></i> Editar Contraseña de Usuario</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form id="editPasswordForm" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="modal-body">
                         <div class="alert alert-info border-0 mb-3" style="background: rgba(0, 188, 212, 0.1); color: #4dd0e1; font-size: 13px;">
                             <i class="bi bi-person-fill me-2"></i>
-                            Usuário: <strong id="editPasswordUsername"></strong>
+                            Usuario: <strong id="editPasswordUsername"></strong>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-key"></i> Nova senha</label>
+                            <label class="form-label"><i class="bi bi-key"></i> Nueva contraseña</label>
                             <input type="password" class="form-control" name="new_password" required minlength="4" autocomplete="new-password">
-                            <small class="text-muted">Mínimo de 4 caracteres</small>
+                            <small class="text-muted">Mínimo 4 caracteres</small>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-key"></i> Confirmar senha</label>
+                            <label class="form-label"><i class="bi bi-key"></i> Confirmar contraseña</label>
                             <input type="password" class="form-control" name="confirm_password" required minlength="4" autocomplete="new-password">
                         </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Cancelar</button>
-                        <button type="submit" class="btn btn-warning"><i class="bi bi-check-circle-fill"></i> Alterar</button>
+                        <button type="submit" class="btn btn-warning"><i class="bi bi-check-circle-fill"></i> Cambiar</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
     
-    <!-- Modal Alterar Expiração de Usuário -->
+    <!-- Modal Cambiar Expiración de Usuario -->
     <div class="modal fade" id="editExpiryModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title"><i class="bi bi-calendar-event-fill"></i> Editar Expiração</h5>
+                    <h5 class="modal-title"><i class="bi bi-calendar-event-fill"></i> Editar Expiración</h5>
                     <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
                 </div>
                 <form id="editExpiryForm" method="POST">
+                    <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
                     <div class="modal-body">
                         <div class="alert alert-info border-0 mb-3" style="background: rgba(0, 188, 212, 0.1); color: #4dd0e1; font-size: 13px;">
                             <i class="bi bi-person-fill me-2"></i>
-                            Usuário: <strong id="editExpiryUsername"></strong>
+                            Usuario: <strong id="editExpiryUsername"></strong>
                             <br>
                             <i class="bi bi-calendar3 me-2"></i>
-                            Expiração atual: <strong id="editExpiryCurrent"></strong>
+                            Expiración actual: <strong id="editExpiryCurrent"></strong>
                         </div>
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-clock-history"></i> Opções rápidas</label>
+                            <label class="form-label"><i class="bi bi-clock-history"></i> Opciones rápidas</label>
                             <div class="d-grid gap-2">
                                 <button type="submit" name="action" value="extend_7" class="btn btn-outline-success btn-sm">
-                                    <i class="bi bi-plus-circle"></i> Estender 7 dias
+                                    <i class="bi bi-plus-circle"></i> Extender 7 días
                                 </button>
                                 <button type="submit" name="action" value="extend_15" class="btn btn-outline-success btn-sm">
-                                    <i class="bi bi-plus-circle"></i> Estender 15 dias
+                                    <i class="bi bi-plus-circle"></i> Extender 15 días
                                 </button>
                                 <button type="submit" name="action" value="extend_30" class="btn btn-outline-success btn-sm">
-                                    <i class="bi bi-plus-circle"></i> Estender 30 dias
+                                    <i class="bi bi-plus-circle"></i> Extender 30 días
                                 </button>
                                 <button type="submit" name="action" value="extend_60" class="btn btn-outline-success btn-sm">
-                                    <i class="bi bi-plus-circle"></i> Estender 60 dias
+                                    <i class="bi bi-plus-circle"></i> Extender 60 días
                                 </button>
                                 <button type="submit" name="action" value="extend_90" class="btn btn-outline-success btn-sm">
-                                    <i class="bi bi-plus-circle"></i> Estender 90 dias
+                                    <i class="bi bi-plus-circle"></i> Extender 90 días
                                 </button>
                             </div>
                         </div>
                         <hr style="border-color: var(--border-color);">
                         <div class="mb-3">
-                            <label class="form-label"><i class="bi bi-calendar-check"></i> Data personalizada</label>
+                            <label class="form-label"><i class="bi bi-calendar-check"></i> Fecha personalizada</label>
                             <div class="input-group">
                                 <input type="date" class="form-control" id="customDateInput" name="custom_date">
                                 <button type="submit" name="action" value="custom" class="btn btn-outline-info btn-sm">
@@ -1649,19 +1654,19 @@
                             </div>
                         </div>
                         <hr style="border-color: var(--border-color);">
-                        <button type="submit" name="action" value="permanent" class="btn btn-outline-warning btn-sm w-100" onclick="return confirm('Tornar este usuário permanente?');">
-                            <i class="bi bi-infinity"></i> Remover expiração (permanente)
+                        <button type="submit" name="action" value="permanent" class="btn btn-outline-warning btn-sm w-100" onclick="return confirm('¿Hacer este usuario permanente?');">
+                            <i class="bi bi-infinity"></i> Quitar expiración (permanente)
                         </button>
                     </div>
                     <div class="modal-footer">
-                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Fechar</button>
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal"><i class="bi bi-x-circle"></i> Cerrar</button>
                     </div>
                 </form>
             </div>
         </div>
     </div>
     
-    <!-- Modal de Atualização -->
+    <!-- Modal de Actualización -->
     <div class="update-modal-overlay" id="updateModal">
         <div class="update-modal-box" id="updateModalBox"></div>
     </div>
@@ -1675,7 +1680,7 @@
             localStorage.setItem('hexTheme', theme);
             updateThemeDropdown(theme);
             closeThemeDropdown();
-            showToast('info', 'Tema alterado', `Modo ${theme === 'gaming' ? 'Gaming 🎮' : theme === 'light' ? 'Claro ☀️' : 'Escuro 🌙'} ativado`);
+            showToast('info', 'Tema cambiado', `Modo ${theme === 'gaming' ? 'Gaming 🎮' : theme === 'light' ? 'Claro ☀️' : 'Oscuro 🌙'} activado`);
         }
         
         function updateThemeDropdown(theme) {
@@ -1744,10 +1749,10 @@
             
             if (autoRefreshEnabled) {
                 startAutoRefresh();
-                showToast('success', 'Auto-refresh ativado', 'O dashboard será atualizado a cada 30 segundos');
+                showToast('success', 'Auto-refresh activado', 'El dashboard se actualizará cada 30 segundos');
             } else {
                 stopAutoRefresh();
-                showToast('info', 'Auto-refresh desativado', 'O dashboard não será mais atualizado automaticamente');
+                showToast('info', 'Auto-refresh desactivado', 'El dashboard ya no se actualizará automáticamente');
             }
         }
         
@@ -1787,19 +1792,34 @@
                 const data = await response.json();
                 if (data.error) return;
             } catch (error) {
-                console.error('Erro atualizando dados:', error);
+                console.error('Error refreshing data:', error);
             }
         }
         
         updateAutoRefreshUI();
         if (autoRefreshEnabled) startAutoRefresh();
         
-        // ═══ MODAL DE SENHA ADMIN ═══
+        // ═══ MODAL DE CONTRASEÑA ADMIN ═══
+        const CSRF_TOKEN = document.querySelector('meta[name="csrf-token"]').content;
+        // Ações que alteram estado: sempre POST com token CSRF (nunca GET)
+        function postAction(url, confirmMsg) {
+            if (confirmMsg && !confirm(confirmMsg)) return false;
+            const f = document.createElement('form');
+            f.method = 'POST';
+            f.action = url;
+            const i = document.createElement('input');
+            i.type = 'hidden'; i.name = 'csrf_token'; i.value = CSRF_TOKEN;
+            f.appendChild(i);
+            document.body.appendChild(f);
+            f.submit();
+            return false;
+        }
+
         function openPasswordModal() {
             new bootstrap.Modal(document.getElementById('changePasswordModal')).show();
         }
         
-        // ═══ EDITAR USUÁRIO: SENHA ═══
+        // ═══ EDITAR USUARIO: CONTRASEÑA ═══
         function openEditPasswordModal(username) {
             document.getElementById('editPasswordUsername').textContent = username;
             document.getElementById('editPasswordForm').action = '/edit_password/' + username;
@@ -1807,7 +1827,7 @@
             new bootstrap.Modal(document.getElementById('editPasswordModal')).show();
         }
         
-        // ═══ EDITAR USUÁRIO: EXPIRAÇÃO ═══
+        // ═══ EDITAR USUARIO: EXPIRACIÓN ═══
         function openEditExpiryModal(username, currentExp) {
             document.getElementById('editExpiryUsername').textContent = username;
             document.getElementById('editExpiryCurrent').textContent = currentExp;
@@ -1816,58 +1836,58 @@
             new bootstrap.Modal(document.getElementById('editExpiryModal')).show();
         }
         
-        // ═══ ATUALIZAÇÃO DO SISTEMA ═══
+        // ═══ ACTUALIZACIÓN DEL SISTEMA ═══
         function startUpdate() {
-            if (!confirm('Deseja atualizar o sistema agora? Backups automáticos serão criados.')) return;
+            if (!confirm('¿Deseas actualizar el sistema ahora? Se crearán backups automáticos.')) return;
             
             const modal = document.getElementById('updateModal');
             const modalBox = document.getElementById('updateModalBox');
             const btnUpdate = document.getElementById('btnUpdateNow');
             
             btnUpdate.disabled = true;
-            btnUpdate.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Atualizando...';
+            btnUpdate.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Actualizando...';
             
             modal.classList.add('active');
             modalBox.innerHTML = `
                 <div class="update-spinner"></div>
-                <div class="update-modal-title">Atualizando Sistema</div>
-                <div class="update-modal-subtitle">Por favor, aguarde...</div>
+                <div class="update-modal-title">Actualizando Sistema</div>
+                <div class="update-modal-subtitle">Por favor espera...</div>
                 <div class="update-steps">
                     <div class="update-step" id="step-menu">
                         <div class="update-step-icon"><i class="bi bi-list"></i></div>
-                        <div class="update-step-text">Atualizando menu HEX</div>
-                        <div class="update-step-status">Pendente</div>
+                        <div class="update-step-text">Actualizando menú HEX</div>
+                        <div class="update-step-status">Pendiente</div>
                     </div>
                     <div class="update-step" id="step-templates">
                         <div class="update-step-icon"><i class="bi bi-file-earmark-code"></i></div>
-                        <div class="update-step-text">Atualizando templates web</div>
-                        <div class="update-step-status">Pendente</div>
+                        <div class="update-step-text">Actualizando templates web</div>
+                        <div class="update-step-status">Pendiente</div>
                     </div>
                     <div class="update-step" id="step-backend">
                         <div class="update-step-icon"><i class="bi bi-gear"></i></div>
-                        <div class="update-step-text">Atualizando backend</div>
-                        <div class="update-step-status">Pendente</div>
+                        <div class="update-step-text">Actualizando backend</div>
+                        <div class="update-step-status">Pendiente</div>
                     </div>
                     <div class="update-step" id="step-version">
                         <div class="update-step-icon"><i class="bi bi-tag"></i></div>
-                        <div class="update-step-text">Atualizando versão</div>
-                        <div class="update-step-status">Pendente</div>
+                        <div class="update-step-text">Actualizando versión</div>
+                        <div class="update-step-status">Pendiente</div>
                     </div>
                 </div>
             `;
             
-            animateStep('step-menu', 'Atualizando...');
-            setTimeout(() => animateStep('step-templates', 'Atualizando...'), 800);
-            setTimeout(() => animateStep('step-backend', 'Atualizando...'), 1600);
-            setTimeout(() => animateStep('step-version', 'Atualizando...'), 2400);
+            animateStep('step-menu', 'Actualizando...');
+            setTimeout(() => animateStep('step-templates', 'Actualizando...'), 800);
+            setTimeout(() => animateStep('step-backend', 'Actualizando...'), 1600);
+            setTimeout(() => animateStep('step-version', 'Actualizando...'), 2400);
             
-            fetch('/update_now', { method: 'POST', headers: { 'Content-Type': 'application/json' } })
+            fetch('/update_now', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-CSRF-Token': CSRF_TOKEN } })
             .then(response => response.json())
             .then(data => {
                 if (data.success) showUpdateSuccess(data);
                 else showUpdateError(data.message);
             })
-            .catch(error => showUpdateError('Erro de conexão: ' + error.message));
+            .catch(error => showUpdateError('Error de conexión: ' + error.message));
         }
         
         function animateStep(stepId, statusText) {
@@ -1896,18 +1916,18 @@
             completeStep('step-backend', data.details.backend.success, data.details.backend.message);
             completeStep('step-version', data.details.version.success, data.details.version.message);
             
-            showToast('success', 'Atualização concluída com sucesso!', data.message);
+            showToast('success', '¡Actualización exitosa!', data.message);
             
             setTimeout(() => {
                 modalBox.innerHTML = `
                     <div class="update-success-icon"><i class="bi bi-check-lg"></i></div>
-                    <div class="update-modal-title">Atualização Concluída com Sucesso!</div>
+                    <div class="update-modal-title">¡Actualización Exitosa!</div>
                     <div class="update-modal-subtitle">${data.message}</div>
                     ${data.restart ? `<div class="alert alert-info border-0 mt-3" style="background: rgba(0, 188, 212, 0.1); color: #4dd0e1; font-size: 13px;">
                         <i class="bi bi-arrow-repeat"></i> ${data.restart}
                     </div>` : ''}
                     <div style="margin-top: 15px; color: var(--text-secondary); font-size: 12px;">
-                        <i class="bi bi-clock"></i> Recarregando em <span id="countdown">5</span> segundos...
+                        <i class="bi bi-clock"></i> Recargando en <span id="countdown">5</span> segundos...
                     </div>
                 `;
                 
@@ -1930,23 +1950,23 @@
                 <div style="width: 90px; height: 90px; margin: 0 auto 20px; background: linear-gradient(135deg, #ff5252, #ff1744); border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 45px; color: #fff;">
                     <i class="bi bi-exclamation-triangle"></i>
                 </div>
-                <div class="update-modal-title" style="color: #ff5252;">Erro na Atualização</div>
+                <div class="update-modal-title" style="color: #ff5252;">Error en la Actualización</div>
                 <div class="update-modal-subtitle">${message}</div>
                 <button class="btn-update-compact mt-3" onclick="window.location.reload()" style="background: linear-gradient(135deg, #6c757d, #495057);">
-                    <i class="bi bi-arrow-clockwise"></i> Recarregar Página
+                    <i class="bi bi-arrow-clockwise"></i> Recargar Página
                 </button>
             `;
             
             const btnUpdate = document.getElementById('btnUpdateNow');
             if (btnUpdate) {
                 btnUpdate.disabled = false;
-                btnUpdate.innerHTML = '<i class="bi bi-cloud-download"></i> Atualizar Agora';
+                btnUpdate.innerHTML = '<i class="bi bi-cloud-download"></i> Actualizar Ahora';
             }
         }
         
-        // Toast de boas-vindas
+        // Toast de bienvenida
         setTimeout(() => {
-            showToast('info', 'Bem-vindo!', 'Web Manager v{{ stats.update_info.local_version }}');
+            showToast('info', '¡Bienvenido!', 'Web Manager v{{ stats.update_info.local_version }}');
         }, 500);
     </script>
 </body>

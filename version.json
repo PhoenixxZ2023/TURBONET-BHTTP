@@ -1,10 +1,25 @@
 {
-  "version": "1.0.1",
-  "release_date": "2026-10-04",
-  "changelog": "Panel web moderno",
+  "version": "1.1.1",
+  "release_date": "2026-10-07",
+  "changelog": "Acoes do painel agora via POST com token CSRF (excluir, servicos, sair)",
   "components": {
-    "menu": "1.0.1",
-    "templates": "1.0.1",
-    "backend": "1.0.1"
+    "menu": "1.1.1",
+    "templates": "1.1.1",
+    "backend": "1.1.1"
+  },
+  "sha256": {
+    "app.py": "5dd3088ac997c7ec1680838314325051c79c6af9639f55e5e74571281f282242",
+    "hex_menu.sh": "6b7a99d4267686ace8d7885c2bee33f194f970da233180cdf55b2db16d0f05c9",
+    "hex_cleanup.sh": "37a159a3d0457cd5ab0f478a7c4929cc4ebea66dd35ffcf4d1c7ab102c48bac0",
+    "install.sh": "72cb354d6c2d82d2de8251d9d16e45bbd289e709bf13cbf601ca3804e3c43614",
+    "install_webpanel.sh": "2886c8ce14c1c29e467ef7d36b55fe7d6b5d384d696e0f94a4eddcbba7c9a683",
+    "templates/login.html": "f2dc8d5e0ba0e2e622939842469012044cd239d849edf68514a83b8473b7f6a6",
+    "templates/dashboard.html": "792e05ff71ef84fcdc838738f3b74a64bc852ba7689e0a87b28d2c3a57d87252",
+    "bhttp-server-v2.4.0-btun-compat-linux-amd64": "fc86704c532eecac013b1f48063360a8bef754de6b332ce6e9a32de4aec0c750",
+    "bhttp-server-v2.4.0-btun-compat-linux-arm64": "344da35ae482c1d3b9e71358edd3172b406dd881a4177dbbfcfaccacbfb19b42",
+    "bhttp-server-v2.4.1-btun-compat-keepalive-linux-amd64": "65c1fd59e2c5690253beb435b55b15dcccfd61423aa89207c9c82a8f7f85fd28",
+    "bhttp-server-v2.4.1-btun-compat-keepalive-linux-arm64": "5da6d785d4b986aa0eb2b9112a920f11e28a13d876a6f39c6dc1b1ba69b782e6",
+    "hcr-server-linux-amd64": "799154d100aa48c65230bd3f9f7f53a2bface5c001d0e7c13ff8dde23a51b486",
+    "hcr-server-linux-arm64": "0c23253815c092b22e4c8e19578d2b96ea7e7633627229fa5e865b11c57b9a1e"
   }
 }

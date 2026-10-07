@@ -1,20 +1,55 @@
-import os, subprocess, datetime, logging, time, json, threading
-from flask import Flask, render_template, request, redirect, url_for, flash, jsonify
+#!/usr/bin/env python3
+# ═══════════════════════════════════════════════════════════════
+#  HEX WEB PANEL - backend (v1.1.1)
+#  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
+#
+#  Mudanças de segurança em relação à v1.0.1:
+#   - secret_key aleatória e persistente (antes: fixa e pública)
+#   - senha inicial aleatória (antes: admin26) + bcrypt custo 12
+#   - limite de tentativas de login por IP
+#   - cookie de sessão HttpOnly + SameSite=Strict + checagem de Origin
+#   - todas as rotas de usuário só operam em contas gerenciadas (users.txt)
+#   - validação de usuário/senha/data; sem ':' ou quebras de linha
+#   - gravação atômica de users.txt (+ trava de arquivo)
+#   - OTA com arquivos temporários privados e verificação SHA256
+#   - system_stats (CPU/RAM/disco) exigido pelo dashboard.html
+#   v1.1.1: ações que alteram estado (delete_user, control_service, logout)
+#           agora são POST; token CSRF obrigatório em todo POST
+# ═══════════════════════════════════════════════════════════════
+import os, re, json, time, hashlib, hmac, secrets, logging, tempfile, threading
+import subprocess, datetime, fcntl, shutil, urllib.request
+from urllib.parse import urlparse
+
+from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort, session
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
 import bcrypt
 
-logging.basicConfig(filename='/var/log/hex-webpanel.log', level=logging.INFO, 
-                    format='%(asctime)s - %(levelname)s - %(message)s')
+try:
+    import psutil
+except ImportError:  # o painel funciona sem psutil, só sem os gráficos
+    psutil = None
 
-app = Flask(__name__)
-app.secret_key = 'hex_secret_key_mudar_123'
-login_manager = LoginManager()
-login_manager.init_app(app)
-login_manager.login_view = 'login'
+# ───────────────────────── caminhos / constantes ─────────────────────────
+HEX_DIR = os.environ.get("HEX_DIR", "/etc/hex")
+LOG_FILE = os.environ.get("HEX_LOG", "/var/log/hex-webpanel.log")
+PANEL_DIR = os.environ.get("HEX_PANEL_DIR", "/opt/hex-webpanel")
+MENU_PATH = os.environ.get("HEX_MENU_PATH", "/usr/local/bin/hex_menu")
+CLEANUP_PATH = os.environ.get("HEX_CLEANUP_PATH", "/usr/local/bin/hex_cleanup.sh")
+GITHUB_RAW = os.environ.get(
+    "HEX_GITHUB_RAW",
+    "https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main")
 
-ADMIN_PASSWORD_HASH = None
-PASSWORD_FILE = "/etc/hex/webpanel_admin_pass.conf"
-DEFAULT_PASSWORD = "admin26"
+USER_DB = os.path.join(HEX_DIR, "users.txt")
+USER_DB_LOCK = os.path.join(HEX_DIR, ".users.lock")
+PASSWORD_FILE = os.path.join(HEX_DIR, "webpanel_admin_pass.conf")
+INITIAL_PASS_FILE = os.path.join(HEX_DIR, "webpanel_initial_password.txt")
+SECRET_FILE = os.path.join(HEX_DIR, "webpanel_secret.key")
+WEBPANEL_PORT_FILE = os.path.join(HEX_DIR, "webpanel_port.conf")
+VERSION_FILE = os.path.join(HEX_DIR, "version")
+UPDATE_CACHE_FILE = os.path.join(HEX_DIR, "update_cache.json")
+REQUIRE_CHECKSUM_FILE = os.path.join(HEX_DIR, "require_checksum")
+USER_SHELL_FILE = os.path.join(HEX_DIR, "user_shell")
+USER_GROUP = "hexusers"
 
 SYSTEMCTL = '/usr/bin/systemctl'
 USERADD = '/usr/sbin/useradd'
@@ -25,25 +60,83 @@ CHAGE = '/usr/bin/chage'
 GROUPADD = '/usr/sbin/groupadd'
 ID = '/usr/bin/id'
 GETENT = '/usr/bin/getent'
-CURL = '/usr/bin/curl'
+PKILL = '/usr/bin/pkill'
 BASH = '/bin/bash'
-CP = '/bin/cp'
-MV = '/bin/mv'
-RM = '/bin/rm'
 
-WEBPANEL_PORT_FILE = "/etc/hex/webpanel_port.conf"
-VERSION_FILE = "/etc/hex/version"
-UPDATE_CACHE_FILE = "/tmp/hex_update_cache.json"
-GITHUB_RAW = "https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main"
 CACHE_DURATION = 300
+SERVICES = ('bhttp', 'hcr', 'udpgw')
+USERNAME_RE = re.compile(r'^[a-z_][a-z0-9_-]{0,31}$')
+PORT_RE = re.compile(r'^[0-9]{1,5}$')
+OLD_DEFAULT_PASSWORDS = ("admin26", "HexAdmin2026")
 
-# ═══════════════════════════════════════════════════════════════
-#  SISTEMA DE SENHAS COM BCRYPT
-# ═══════════════════════════════════════════════════════════════
+MAX_LOGIN_FAILS = 5
+LOGIN_LOCK_SECONDS = 15 * 60
+
+try:
+    logging.basicConfig(filename=LOG_FILE, level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+except OSError:
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(levelname)s - %(message)s')
+
+# ───────────────────────── utilitários de arquivo ─────────────────────────
+def write_atomic(path, data, mode=0o600):
+    """Grava em arquivo temporário privado no mesmo diretório e troca com rename."""
+    if isinstance(data, str):
+        data = data.encode('utf-8')
+    d = os.path.dirname(path) or '.'
+    os.makedirs(d, exist_ok=True)
+    fd, tmp = tempfile.mkstemp(dir=d, prefix='.tmp-')
+    try:
+        with os.fdopen(fd, 'wb') as f:
+            f.write(data)
+            f.flush()
+            os.fsync(f.fileno())
+        os.chmod(tmp, mode)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+class DbLock:
+    """Trava de processo + thread para users.txt."""
+    _tl = threading.RLock()
+
+    def __enter__(self):
+        DbLock._tl.acquire()
+        os.makedirs(HEX_DIR, exist_ok=True)
+        self._fh = open(USER_DB_LOCK, 'a')
+        fcntl.flock(self._fh, fcntl.LOCK_EX)
+        return self
+
+    def __exit__(self, *exc):
+        fcntl.flock(self._fh, fcntl.LOCK_UN)
+        self._fh.close()
+        DbLock._tl.release()
+
+
+# ───────────────────────── chave secreta e senha ─────────────────────────
+def load_secret_key():
+    try:
+        with open(SECRET_FILE, 'rb') as f:
+            key = f.read()
+        if len(key) >= 32:
+            return key
+    except OSError:
+        pass
+    key = secrets.token_bytes(32)
+    write_atomic(SECRET_FILE, key, 0o600)
+    logging.info("Nova secret_key gerada")
+    return key
+
 
 def hash_password(password):
-    salt = bcrypt.gensalt(rounds=8)
-    return bcrypt.hashpw(password.encode('utf-8'), salt).decode('utf-8')
+    return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt(rounds=12)).decode('utf-8')
+
 
 def verify_password(password, hashed):
     try:
@@ -52,347 +145,551 @@ def verify_password(password, hashed):
         logging.error(f"Erro ao verificar senha: {e}")
         return False
 
-def is_bcrypt_hash(value):
-    if not value:
-        return False
-    return value.startswith(('$2b$', '$2a$', '$2y$')) and len(value) == 60
 
-def save_password_hash(hashed_password):
+def is_bcrypt_hash(value):
+    return bool(value) and value.startswith(('$2b$', '$2a$', '$2y$')) and len(value) == 60
+
+
+def save_password_hash(hashed):
     try:
-        os.makedirs(os.path.dirname(PASSWORD_FILE), exist_ok=True)
-        with open(PASSWORD_FILE, 'w') as f:
-            f.write(hashed_password)
-        os.chmod(PASSWORD_FILE, 0o600)
+        write_atomic(PASSWORD_FILE, hashed, 0o600)
         return True
     except Exception as e:
         logging.error(f"Erro ao salvar hash: {e}")
         return False
 
+
 def load_admin_password():
-    global ADMIN_PASSWORD_HASH
+    """Carrega o hash. Migra texto puro; se não existir, gera senha inicial aleatória."""
     try:
         if os.path.exists(PASSWORD_FILE):
-            stored = open(PASSWORD_FILE).read().strip()
+            with open(PASSWORD_FILE) as f:
+                stored = f.read().strip()
             if not is_bcrypt_hash(stored):
                 logging.info("Migrando senha de texto plano para bcrypt...")
                 stored = hash_password(stored)
                 save_password_hash(stored)
-            ADMIN_PASSWORD_HASH = stored
-        else:
-            logging.info("Criando arquivo de senha com valor padrão...")
-            ADMIN_PASSWORD_HASH = hash_password(DEFAULT_PASSWORD)
-            save_password_hash(ADMIN_PASSWORD_HASH)
+            return stored
+        initial = secrets.token_urlsafe(9)  # 12 caracteres
+        hashed = hash_password(initial)
+        save_password_hash(hashed)
+        write_atomic(INITIAL_PASS_FILE,
+                     f"Senha inicial do painel: {initial}\n"
+                     "Troque no dashboard; este arquivo é apagado quando você trocar.\n", 0o600)
+        logging.info(f"Senha inicial gerada em {INITIAL_PASS_FILE}")
+        return hashed
     except Exception as e:
         logging.error(f"Erro ao carregar senha: {e}")
-        ADMIN_PASSWORD_HASH = hash_password(DEFAULT_PASSWORD)
+        raise
 
-load_admin_password()
 
-# ═══════════════════════════════════════════════════════════════
-#  UTILITÁRIOS
-# ═══════════════════════════════════════════════════════════════
+# ───────────────────────── app / sessão ─────────────────────────
+app = Flask(__name__)
+app.secret_key = load_secret_key()
+app.config.update(
+    SESSION_COOKIE_NAME="hex_session",
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Strict",
+    SESSION_COOKIE_SECURE=os.environ.get("HEX_PANEL_HTTPS") == "1",
+    MAX_CONTENT_LENGTH=64 * 1024,
+)
+login_manager = LoginManager()
+login_manager.init_app(app)
+login_manager.login_view = 'login'
+ADMIN_PASSWORD_HASH = load_admin_password()
 
-def get_webpanel_port():
-    try:
-        if os.path.exists(WEBPANEL_PORT_FILE):
-            return int(open(WEBPANEL_PORT_FILE).read().strip())
-    except:
-        pass
-    return 9000
+TRUSTED_HOSTS = {h.strip() for h in os.environ.get("HEX_TRUSTED_HOSTS", "").split(",") if h.strip()}
+
 
 class User(UserMixin):
-    def __init__(self, id): self.id = id
+    def __init__(self, id):
+        self.id = id
+
 
 @login_manager.user_loader
-def load_user(user_id): return User(user_id)
+def load_user(user_id):
+    return User(user_id) if user_id == "admin" else None
+
+
+def csrf_token():
+    """Token CSRF por sessão (usado nos templates via {{ csrf_token() }})."""
+    tok = session.get("_csrf")
+    if not tok:
+        tok = secrets.token_urlsafe(32)
+        session["_csrf"] = tok
+    return tok
+
+
+@app.context_processor
+def inject_csrf():
+    return {"csrf_token": csrf_token}
+
+
+@app.before_request
+def check_csrf():
+    """Em todo POST/PUT/PATCH/DELETE: Origin coerente + token CSRF válido."""
+    if request.method in ("POST", "PUT", "PATCH", "DELETE"):
+        origin = request.headers.get("Origin") or request.headers.get("Referer")
+        if origin:
+            host = urlparse(origin).netloc
+            if host != request.host and host not in TRUSTED_HOSTS:
+                logging.warning(f"Origin bloqueada: {origin!r} de {request.remote_addr}")
+                abort(403)
+        sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or ""
+        expected = session.get("_csrf", "")
+        if not expected or not hmac.compare_digest(sent.encode("utf-8"), expected.encode("utf-8")):
+            logging.warning(f"CSRF inválido em {request.path} de {request.remote_addr}")
+            abort(403)
+
+
+@app.errorhandler(403)
+def forbidden(_e):
+    msg = "Requisição bloqueada (sessão expirada ou origem inválida). Recarregue a página."
+    if request.path == "/update_now":
+        return jsonify({"success": False, "message": msg}), 403
+    return f"<h3>403 - {msg}</h3><p><a href='/'>Voltar</a></p>", 403
+
+
+@app.after_request
+def security_headers(resp):
+    resp.headers.setdefault("X-Frame-Options", "DENY")
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault("Cache-Control", "no-store")
+    return resp
+
+
+# ───────────────────────── limite de tentativas de login ─────────────────────────
+_fails = {}
+_fails_lock = threading.Lock()
+
+
+def login_blocked(ip):
+    with _fails_lock:
+        info = _fails.get(ip)
+        if info and info["until"] > time.time():
+            return int(info["until"] - time.time())
+    return 0
+
+
+def register_fail(ip):
+    with _fails_lock:
+        info = _fails.setdefault(ip, {"count": 0, "until": 0})
+        if info["until"] and info["until"] <= time.time():
+            info["count"], info["until"] = 0, 0
+        info["count"] += 1
+        if info["count"] >= MAX_LOGIN_FAILS:
+            info["until"] = time.time() + LOGIN_LOCK_SECONDS
+
+
+def clear_fails(ip):
+    with _fails_lock:
+        _fails.pop(ip, None)
+
+
+# ───────────────────────── validação ─────────────────────────
+def valid_username(u):
+    return bool(USERNAME_RE.match(u or ''))
+
+
+def valid_user_password(p):
+    if not p or not (4 <= len(p) <= 64):
+        return False
+    return not any(c == ':' or ord(c) < 32 or ord(c) == 127 for c in p)
+
+
+def valid_date(s):
+    try:
+        datetime.datetime.strptime(s, "%Y-%m-%d")
+        return True
+    except (ValueError, TypeError):
+        return False
+
+
+def get_user_shell():
+    try:
+        with open(USER_SHELL_FILE) as f:
+            sh = f.read().strip()
+        if sh in ('/bin/bash', '/bin/sh', '/bin/false', '/usr/sbin/nologin'):
+            return sh
+    except OSError:
+        pass
+    return '/bin/bash'
+
+
+# ───────────────────────── banco de usuários (users.txt) ─────────────────────────
+def _parse_line(line):
+    """user:senha:exp. Tolera ':' dentro da senha (entradas antigas)."""
+    line = line.rstrip('\n')
+    if not line or ':' not in line:
+        return None
+    user, rest = line.split(':', 1)
+    if ':' not in rest:
+        return None
+    pwd, exp = rest.rsplit(':', 1)
+    if not user:
+        return None
+    return user, pwd, exp
+
+
+def read_db():
+    entries = []
+    try:
+        with open(USER_DB) as f:
+            for line in f:
+                e = _parse_line(line)
+                if e:
+                    entries.append(e)
+    except FileNotFoundError:
+        pass
+    except Exception as e:
+        logging.error(f"Erro ao ler users.txt: {e}")
+    return entries
+
+
+def write_db(entries):
+    write_atomic(USER_DB, ''.join(f"{u}:{p}:{e}\n" for u, p, e in entries), 0o600)
+
+
+def db_has(username):
+    return any(u == username for u, _, _ in read_db())
+
+
+def get_users():
+    return [{"user": u, "exp": e} for u, _, e in read_db()]
+
+
+# ───────────────────────── comandos do sistema ─────────────────────────
+def run(cmd, **kw):
+    kw.setdefault('capture_output', True)
+    kw.setdefault('text', True)
+    kw.setdefault('timeout', 20)
+    return subprocess.run(cmd, **kw)
+
+
+def system_user_exists(user):
+    return run([ID, user]).returncode == 0
+
+
+def set_expiry(user, exp_date):
+    if exp_date == "2099-12-31":
+        run([CHAGE, '-E', '-1', user])
+        run([USERMOD, '-e', '', user])
+    else:
+        run([CHAGE, '-E', exp_date, user])
+        run([USERMOD, '-e', exp_date, user])
+
 
 def get_service_status(svc, port):
     try:
-        result = subprocess.run([SYSTEMCTL, 'is-active', f"{svc}@{port}.service"], 
-                              capture_output=True, text=True)
-        return result.returncode == 0 and "active" in result.stdout
-    except:
+        r = run([SYSTEMCTL, 'is-active', f"{svc}@{port}.service"], timeout=5)
+        return r.returncode == 0 and "active" in r.stdout
+    except Exception:
         return False
 
-def get_users():
-    users = []
-    if os.path.exists("/etc/hex/users.txt"):
-        try:
-            with open("/etc/hex/users.txt", "r") as f:
-                for line in f:
-                    parts = line.strip().split(":")
-                    if len(parts) == 3: 
-                        users.append({"user": parts[0], "exp": parts[2]})
-        except Exception as e:
-            logging.error(f"Erro ao ler users.txt: {e}")
-    return users
 
-# ═══════════════════════════════════════════════════════════════
-#  COMPARAÇÃO SEMÂNTICA DE VERSÕES
-# ═══════════════════════════════════════════════════════════════
-
-def compare_versions(v1, v2):
+def read_ports(svc):
+    path = os.path.join(HEX_DIR, f"{svc}_ports.conf")
     try:
-        def normalize(v):
-            parts = []
-            for p in v.strip().split('.'):
-                num = ''
-                for c in p:
-                    if c.isdigit(): num += c
-                    else: break
-                parts.append(int(num) if num else 0)
-            return parts
-        
-        p1 = normalize(v1)
-        p2 = normalize(v2)
-        max_len = max(len(p1), len(p2))
-        p1.extend([0] * (max_len - len(p1)))
-        p2.extend([0] * (max_len - len(p2)))
-        
-        for a, b in zip(p1, p2):
-            if a > b: return 1
-            if a < b: return -1
-        return 0
+        with open(path) as f:
+            return [p.strip() for p in f if PORT_RE.match(p.strip())]
+    except OSError:
+        return []
+
+
+def get_webpanel_port():
+    try:
+        with open(WEBPANEL_PORT_FILE) as f:
+            p = int(f.read().strip())
+        if 1 <= p <= 65535:
+            return p
+    except Exception:
+        pass
+    return 9000
+
+
+# ───────────────────────── métricas do sistema ─────────────────────────
+def _level(percent):
+    return "success" if percent < 60 else ("warning" if percent < 85 else "danger")
+
+
+def get_system_stats():
+    zero = {"percent": 0, "color": "secondary"}
+    if psutil is None:
+        return {"cpu": dict(zero, cores=os.cpu_count() or 1),
+                "ram": dict(zero, used_gb=0, total_gb=0),
+                "disk": dict(zero, used_gb=0, total_gb=0)}
+    try:
+        cpu = psutil.cpu_percent(interval=0.1)
+        vm = psutil.virtual_memory()
+        du = psutil.disk_usage('/')
+        gb = 1024 ** 3
+        return {
+            "cpu": {"percent": round(cpu, 1), "cores": psutil.cpu_count(logical=True) or 1,
+                    "color": _level(cpu)},
+            "ram": {"percent": round(vm.percent, 1), "used_gb": round(vm.used / gb, 2),
+                    "total_gb": round(vm.total / gb, 2), "color": _level(vm.percent)},
+            "disk": {"percent": round(du.percent, 1), "used_gb": round(du.used / gb, 1),
+                     "total_gb": round(du.total / gb, 1), "color": _level(du.percent)},
+        }
+    except Exception as e:
+        logging.error(f"Erro ao obter métricas: {e}")
+        return {"cpu": dict(zero, cores=os.cpu_count() or 1),
+                "ram": dict(zero, used_gb=0, total_gb=0),
+                "disk": dict(zero, used_gb=0, total_gb=0)}
+
+
+# ───────────────────────── versões / OTA ─────────────────────────
+def compare_versions(v1, v2):
+    def normalize(v):
+        parts = []
+        for p in str(v).strip().split('.'):
+            num = ''
+            for c in p:
+                if c.isdigit():
+                    num += c
+                else:
+                    break
+            parts.append(int(num) if num else 0)
+        return parts
+    try:
+        p1, p2 = normalize(v1), normalize(v2)
+        n = max(len(p1), len(p2))
+        p1 += [0] * (n - len(p1))
+        p2 += [0] * (n - len(p2))
+        return (p1 > p2) - (p1 < p2)
     except Exception as e:
         logging.error(f"Erro ao comparar versões {v1} vs {v2}: {e}")
         return 0
 
-# ═══════════════════════════════════════════════════════════════
-#  SISTEMA DE ATUALIZAÇÕES
-# ═══════════════════════════════════════════════════════════════
 
 def get_local_version():
     try:
-        if os.path.exists(VERSION_FILE):
-            return open(VERSION_FILE).read().strip()
-    except:
-        pass
-    return "1.0.0"
+        with open(VERSION_FILE) as f:
+            return f.read().strip() or "1.0.0"
+    except OSError:
+        return "1.0.0"
+
+
+def http_get(url, limit=3 * 1024 * 1024, timeout=15):
+    req = urllib.request.Request(url, headers={'User-Agent': 'HexWebPanel/1.1'})
+    with urllib.request.urlopen(req, timeout=timeout) as resp:
+        data = resp.read(limit + 1)
+    if len(data) > limit:
+        raise ValueError("arquivo remoto maior que o limite")
+    return data
+
 
 def check_updates():
+    local = get_local_version()
     try:
-        if os.path.exists(UPDATE_CACHE_FILE):
-            cache_age = time.time() - os.path.getmtime(UPDATE_CACHE_FILE)
-            if cache_age < CACHE_DURATION:
-                with open(UPDATE_CACHE_FILE, 'r') as f:
-                    return json.load(f)
-        
-        local_version = get_local_version()
-        import urllib.request
-        req = urllib.request.Request(
-            f"{GITHUB_RAW}/version.json",
-            headers={'User-Agent': 'HexWebPanel/1.0'}
-        )
-        with urllib.request.urlopen(req, timeout=3) as response:
-            remote_data = json.loads(response.read().decode())
-        
-        remote_version = remote_data.get('version', local_version)
-        changelog = remote_data.get('changelog', 'Novas melhorias disponíveis')
-        
-        version_comparison = compare_versions(remote_version, local_version)
-        has_update = version_comparison == 1
-        is_older = version_comparison == -1
-        
-        result = {
-            "has_update": has_update,
-            "local_version": local_version,
-            "remote_version": remote_version,
-            "changelog": changelog,
-            "checked_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-            "is_newer": has_update,
-            "is_older": is_older
-        }
-        
-        with open(UPDATE_CACHE_FILE, 'w') as f:
-            json.dump(result, f)
-        
+        if os.path.exists(UPDATE_CACHE_FILE) and \
+                time.time() - os.path.getmtime(UPDATE_CACHE_FILE) < CACHE_DURATION:
+            with open(UPDATE_CACHE_FILE) as f:
+                cached = json.load(f)
+            cmp_ = compare_versions(cached.get("remote_version", local), local)
+            cached.update(local_version=local, has_update=cmp_ == 1,
+                          is_newer=cmp_ == 1, is_older=cmp_ == -1)
+            return cached
+        remote = json.loads(http_get(f"{GITHUB_RAW}/version.json", timeout=3).decode())
+        rv = str(remote.get('version', local))
+        cmp_ = compare_versions(rv, local)
+        result = {"has_update": cmp_ == 1, "local_version": local, "remote_version": rv,
+                  "changelog": str(remote.get('changelog', 'Novas melhorias disponíveis')),
+                  "checked_at": datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                  "is_newer": cmp_ == 1, "is_older": cmp_ == -1}
+        write_atomic(UPDATE_CACHE_FILE, json.dumps(result), 0o644)
         return result
     except Exception as e:
         logging.error(f"Erro ao verificar atualizações: {e}")
-        return {
-            "has_update": False,
-            "local_version": get_local_version(),
-            "remote_version": get_local_version(),
-            "changelog": "",
-            "checked_at": "",
-            "is_newer": False,
-            "is_older": False,
-            "error": True
-        }
+        return {"has_update": False, "local_version": local, "remote_version": local,
+                "changelog": "", "checked_at": "", "is_newer": False, "is_older": False,
+                "error": True}
+
 
 def invalidate_update_cache():
     try:
-        if os.path.exists(UPDATE_CACHE_FILE):
-            os.remove(UPDATE_CACHE_FILE)
-    except:
+        os.remove(UPDATE_CACHE_FILE)
+    except OSError:
         pass
+
 
 def schedule_restart():
     def restart_later():
         time.sleep(2)
         try:
-            subprocess.run([SYSTEMCTL, 'restart', 'hex-webpanel.service'], 
-                          capture_output=True, timeout=10)
-        except:
+            run([SYSTEMCTL, 'restart', 'hex-webpanel.service'], timeout=10)
+        except Exception:
             pass
-    thread = threading.Thread(target=restart_later, daemon=True)
-    thread.start()
+    threading.Thread(target=restart_later, daemon=True).start()
+
+
+def fetch_verified(relpath, manifest):
+    """Baixa um arquivo do repositório e confere o SHA256 do version.json."""
+    data = http_get(f"{GITHUB_RAW}/{relpath}")
+    expected = (manifest.get("sha256") or {}).get(relpath)
+    if expected:
+        got = hashlib.sha256(data).hexdigest()
+        if not hmac.compare_digest(got, expected.lower()):
+            raise ValueError(f"SHA256 não confere para {relpath}")
+    elif os.path.exists(REQUIRE_CHECKSUM_FILE):
+        raise ValueError(f"sem SHA256 no version.json para {relpath}")
+    else:
+        logging.warning(f"version.json sem SHA256 para {relpath}; seguindo sem verificação")
+    return data
+
+
+def check_syntax(kind, data, name):
+    if kind == "sh":
+        r = subprocess.run([BASH, '-n'], input=data, capture_output=True, timeout=10)
+        if r.returncode != 0:
+            raise ValueError(f"erro de sintaxe em {name}")
+    elif kind == "py":
+        compile(data, name, 'exec')
+    elif kind == "html":
+        app.jinja_env.parse(data.decode('utf-8'))
+
+
+def install_file(dest, data, mode, backup_stamp):
+    if os.path.exists(dest):
+        shutil.copy2(dest, f"{dest}.backup.{backup_stamp}")
+    write_atomic(dest, data, mode)
+
 
 def perform_update():
-    results = {
-        "menu": {"success": False, "message": ""},
-        "templates": {"success": False, "message": ""},
-        "backend": {"success": False, "message": ""},
-        "version": {"success": False, "message": ""}
-    }
-    timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    
-    # Preservar arquivo de senha
-    password_backup = None
-    if os.path.exists(PASSWORD_FILE):
-        with open(PASSWORD_FILE, 'r') as f:
-            password_backup = f.read()
-    
-    # 1. Atualizar menu
+    results = {k: {"success": False, "message": ""} for k in ("menu", "templates", "backend", "version")}
+    stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     try:
-        menu_backup = f"/usr/local/bin/hex_menu.backup.{timestamp}"
-        if os.path.exists("/usr/local/bin/hex_menu"):
-            subprocess.run([CP, '/usr/local/bin/hex_menu', menu_backup], capture_output=True)
-        res = subprocess.run([CURL, '-fsSL', f"{GITHUB_RAW}/hex_menu.sh", '-o', '/tmp/hex_menu_new.sh'],
-                           capture_output=True, text=True, timeout=30)
-        if res.returncode == 0 and os.path.exists('/tmp/hex_menu_new.sh'):
-            syntax_check = subprocess.run([BASH, '-n', '/tmp/hex_menu_new.sh'], capture_output=True)
-            if syntax_check.returncode == 0:
-                subprocess.run([MV, '/tmp/hex_menu_new.sh', '/usr/local/bin/hex_menu'], capture_output=True)
-                os.chmod('/usr/local/bin/hex_menu', 0o755)
-                results["menu"] = {"success": True, "message": "Menu atualizado"}
-            else:
-                results["menu"] = {"success": False, "message": "Erro de sintaxe"}
+        manifest = json.loads(http_get(f"{GITHUB_RAW}/version.json", timeout=10).decode())
+    except Exception as e:
+        for k in results:
+            results[k]["message"] = f"Erro ao baixar version.json: {e}"
+        return results
+
+    # 1. menu (+ script de limpeza)
+    try:
+        if os.path.exists(MENU_PATH):
+            data = fetch_verified("hex_menu.sh", manifest)
+            check_syntax("sh", data, "hex_menu.sh")
+            install_file(MENU_PATH, data, 0o755, stamp)
+            if os.path.exists(CLEANUP_PATH):
+                try:
+                    c = fetch_verified("hex_cleanup.sh", manifest)
+                    check_syntax("sh", c, "hex_cleanup.sh")
+                    install_file(CLEANUP_PATH, c, 0o755, stamp)
+                except Exception as e:
+                    logging.warning(f"hex_cleanup.sh não atualizado: {e}")
+            results["menu"] = {"success": True, "message": "Menu atualizado"}
         else:
-            results["menu"] = {"success": False, "message": "Erro de download"}
+            results["menu"] = {"success": True, "message": "Menu não instalado, ignorado"}
     except Exception as e:
         results["menu"] = {"success": False, "message": str(e)}
-    
-    # 2. Atualizar templates
+
+    # 2. templates
     try:
-        templates_dir = "/opt/hex-webpanel/templates"
-        if os.path.exists(templates_dir):
-            backup_dir = f"{templates_dir}.backup.{timestamp}"
-            subprocess.run([CP, '-r', templates_dir, backup_dir], capture_output=True)
-            login_ok = subprocess.run([CURL, '-fsSL', f"{GITHUB_RAW}/templates/login.html", 
-                                      '-o', f"{templates_dir}/login.html"], capture_output=True, timeout=30).returncode == 0
-            dash_ok = subprocess.run([CURL, '-fsSL', f"{GITHUB_RAW}/templates/dashboard.html", 
-                                     '-o', f"{templates_dir}/dashboard.html"], capture_output=True, timeout=30).returncode == 0
-            if login_ok and dash_ok:
-                results["templates"] = {"success": True, "message": "Templates atualizados"}
-            else:
-                results["templates"] = {"success": False, "message": "Erro em alguns templates"}
+        tdir = os.path.join(PANEL_DIR, "templates")
+        if os.path.isdir(tdir):
+            blobs = {}
+            for name in ("login.html", "dashboard.html"):
+                d = fetch_verified(f"templates/{name}", manifest)
+                check_syntax("html", d, name)
+                blobs[name] = d
+            for name, d in blobs.items():
+                install_file(os.path.join(tdir, name), d, 0o644, stamp)
+            results["templates"] = {"success": True, "message": "Templates atualizados"}
         else:
             results["templates"] = {"success": True, "message": "Painel não instalado, ignorado"}
     except Exception as e:
         results["templates"] = {"success": False, "message": str(e)}
-    
-    # 3. Atualizar backend
+
+    # 3. backend
     try:
-        if os.path.exists("/opt/hex-webpanel/app.py"):
-            app_backup = f"/opt/hex-webpanel/app.py.backup.{timestamp}"
-            subprocess.run([CP, '/opt/hex-webpanel/app.py', app_backup], capture_output=True)
-            res = subprocess.run([CURL, '-fsSL', f"{GITHUB_RAW}/app.py", '-o', '/tmp/app_new.py'],
-                               capture_output=True, text=True, timeout=30)
-            if res.returncode == 0 and os.path.exists('/tmp/app_new.py'):
-                syntax_check = subprocess.run(['python3', '-m', 'py_compile', '/tmp/app_new.py'], capture_output=True)
-                if syntax_check.returncode == 0:
-                    subprocess.run([MV, '/tmp/app_new.py', '/opt/hex-webpanel/app.py'], capture_output=True)
-                    results["backend"] = {"success": True, "message": "Backend atualizado"}
-                else:
-                    results["backend"] = {"success": False, "message": "Erro de sintaxe"}
-            else:
-                results["backend"] = {"success": False, "message": "Erro de download"}
+        dest = os.path.join(PANEL_DIR, "app.py")
+        if os.path.exists(dest):
+            data = fetch_verified("app.py", manifest)
+            check_syntax("py", data, "app.py")
+            install_file(dest, data, 0o644, stamp)
+            results["backend"] = {"success": True, "message": "Backend atualizado"}
         else:
             results["backend"] = {"success": True, "message": "Painel não instalado, ignorado"}
     except Exception as e:
         results["backend"] = {"success": False, "message": str(e)}
-    
-    # 4. Atualizar versão
+
+    # 4. versão
     try:
-        res = subprocess.run([CURL, '-fsSL', f"{GITHUB_RAW}/version.json", '-o', '/tmp/version_new.json'],
-                           capture_output=True, text=True, timeout=30)
-        if res.returncode == 0 and os.path.exists('/tmp/version_new.json'):
-            with open('/tmp/version_new.json', 'r') as f:
-                version_data = json.load(f)
-            new_version = version_data.get('version', '')
-            if new_version:
-                with open(VERSION_FILE, 'w') as f:
-                    f.write(new_version)
-                results["version"] = {"success": True, "message": f"Versão atualizada para {new_version}"}
-            subprocess.run([RM, '/tmp/version_new.json'], capture_output=True)
+        nv = str(manifest.get('version', '')).strip()
+        if nv:
+            write_atomic(VERSION_FILE, nv, 0o644)
+            results["version"] = {"success": True, "message": f"Versão atualizada para {nv}"}
         else:
-            results["version"] = {"success": False, "message": "Erro ao obter versão"}
+            results["version"]["message"] = "Erro ao obter versão"
     except Exception as e:
-        results["version"] = {"success": False, "message": str(e)}
-    
-    # Restaurar arquivo de senha se foi modificado
-    if password_backup and os.path.exists(PASSWORD_FILE):
-        with open(PASSWORD_FILE, 'r') as f:
-            current = f.read()
-        if current != password_backup:
-            with open(PASSWORD_FILE, 'w') as f:
-                f.write(password_backup)
-            logging.info("Arquivo de senha restaurado após atualização")
-    
+        results["version"]["message"] = str(e)
+
     invalidate_update_cache()
     logging.info(f"Atualização concluída: {results}")
     return results
-    
+
+
+# ───────────────────────── dados do dashboard ─────────────────────────
 def get_stats_data():
     try:
-        bhttp_ports = open("/etc/hex/bhttp_ports.conf").read().splitlines() if os.path.exists("/etc/hex/bhttp_ports.conf") else []
-        hcr_ports = open("/etc/hex/hcr_ports.conf").read().splitlines() if os.path.exists("/etc/hex/hcr_ports.conf") else []
-        udpgw_ports = open("/etc/hex/udpgw_ports.conf").read().splitlines() if os.path.exists("/etc/hex/udpgw_ports.conf") else []
-        
-        bhttp_active = sum(1 for p in bhttp_ports if get_service_status("bhttp", p))
-        hcr_active = sum(1 for p in hcr_ports if get_service_status("hcr", p))
-        udpgw_active = sum(1 for p in udpgw_ports if get_service_status("udpgw", p))
-        
-        return {
-            "bhttp_ports": [p for p in bhttp_ports if p.strip()],
-            "hcr_ports": [p for p in hcr_ports if p.strip()],
-            "udpgw_ports": [p for p in udpgw_ports if p.strip()],
-            "bhttp_active": bhttp_active,
-            "hcr_active": hcr_active,
-            "udpgw_active": udpgw_active,
-            "bhttp_online": bhttp_active > 0,
-            "hcr_online": hcr_active > 0,
-            "udpgw_online": udpgw_active > 0,
-            "users": len(get_users()),
-            "webpanel_port": get_webpanel_port(),
-            "update_info": check_updates()
-        }
+        data = {}
+        for svc in SERVICES:
+            ports = read_ports(svc)
+            active = sum(1 for p in ports if get_service_status(svc, p))
+            data[f"{svc}_ports"] = ports
+            data[f"{svc}_active"] = active
+            data[f"{svc}_online"] = active > 0
+        data.update(users=len(get_users()), webpanel_port=get_webpanel_port(),
+                    update_info=check_updates(), system_stats=get_system_stats())
+        return data
     except Exception as e:
         logging.error(f"Erro ao obter stats: {e}")
         return None
 
-# ═══════════════════════════════════════════════════════════════
-#  ROTAS
-# ═══════════════════════════════════════════════════════════════
 
+def empty_stats():
+    d = {}
+    for svc in SERVICES:
+        d.update({f"{svc}_ports": [], f"{svc}_active": 0, f"{svc}_online": False})
+    d.update(users=0, webpanel_port=9000, system_stats=get_system_stats(),
+             update_info={"has_update": False, "local_version": get_local_version(),
+                          "remote_version": get_local_version(), "changelog": "",
+                          "checked_at": "", "is_newer": False, "is_older": False, "error": True})
+    return d
+
+
+# ───────────────────────── rotas ─────────────────────────
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
+        ip = request.remote_addr or '?'
+        wait = login_blocked(ip)
+        if wait:
+            flash(f'Muitas tentativas. Tente de novo em {wait // 60 + 1} min.')
+            return render_template('login.html'), 429
         password = request.form.get('password', '')
         if ADMIN_PASSWORD_HASH and verify_password(password, ADMIN_PASSWORD_HASH):
+            clear_fails(ip)
             login_user(User("admin"))
-            logging.info(f"Login com sucesso de {request.remote_addr}")
+            session["_csrf"] = secrets.token_urlsafe(32)
+            logging.info(f"Login com sucesso de {ip}")
+            if password in OLD_DEFAULT_PASSWORDS:
+                flash("⚠ Você está usando a senha padrão antiga. Troque agora no painel.")
             return redirect(url_for('dashboard'))
-        logging.warning(f"Tentativa de login falhou de {request.remote_addr}")
+        register_fail(ip)
+        logging.warning(f"Tentativa de login falhou de {ip}")
         flash('Senha incorreta')
     return render_template('login.html')
 
-@app.route('/logout')
+
+@app.route('/logout', methods=['POST'])
 @login_required
-def logout(): 
+def logout():
     logout_user()
     return redirect(url_for('login'))
+
 
 @app.route('/')
 @login_required
@@ -400,16 +697,9 @@ def dashboard():
     stats = get_stats_data()
     if stats is None:
         flash("Erro ao carregar o dashboard")
-        stats = {
-            "bhttp_ports":[], "hcr_ports":[], "udpgw_ports":[],
-            "bhttp_active":0, "hcr_active":0, "udpgw_active":0,
-            "bhttp_online":False, "hcr_online":False, "udpgw_online":False,
-            "users":0, "webpanel_port":9000,
-            "update_info": {"has_update": False, "local_version": "1.0.0", 
-                          "remote_version": "1.0.0", "changelog": "", "checked_at": "", 
-                          "is_newer": False, "is_older": False, "error": True}
-        }
+        stats = empty_stats()
     return render_template('dashboard.html', stats=stats, users=get_users())
+
 
 @app.route('/api/stats')
 @login_required
@@ -419,41 +709,41 @@ def api_stats():
         return jsonify({"error": "Não foi possível obter as estatísticas"}), 500
     return jsonify(stats)
 
+
 @app.route('/change_password', methods=['POST'])
 @login_required
 def change_password():
     global ADMIN_PASSWORD_HASH
     try:
-        current_pass = request.form.get('current_password', '')
-        new_pass = request.form.get('new_password', '')
-        confirm_pass = request.form.get('confirm_password', '')
-        
+        cur = request.form.get('current_password', '')
+        new = request.form.get('new_password', '')
+        conf = request.form.get('confirm_password', '')
         logging.info(f"[CHANGE_PASS] Solicitação de {request.remote_addr}")
-        
-        if not new_pass or len(new_pass) < 4:
-            flash("A nova senha deve ter pelo menos 4 caracteres")
-            return redirect(url_for('dashboard'))
-        if new_pass != confirm_pass:
+        if len(new) < 8 or len(new.encode('utf-8')) > 72:
+            flash("A nova senha deve ter entre 8 e 72 caracteres")
+        elif new != conf:
             flash("As novas senhas não coincidem")
-            return redirect(url_for('dashboard'))
-        if not verify_password(current_pass, ADMIN_PASSWORD_HASH):
+        elif not verify_password(cur, ADMIN_PASSWORD_HASH):
             flash("A senha atual está incorreta")
-            return redirect(url_for('dashboard'))
-        if verify_password(new_pass, ADMIN_PASSWORD_HASH):
+        elif verify_password(new, ADMIN_PASSWORD_HASH):
             flash("A nova senha deve ser diferente da atual")
-            return redirect(url_for('dashboard'))
-        
-        new_hash = hash_password(new_pass)
-        if save_password_hash(new_hash):
-            ADMIN_PASSWORD_HASH = new_hash
-            logging.info("[CHANGE_PASS] ✓ Senha alterada com sucesso")
-            flash("✓ Senha alterada com sucesso. Saia para aplicar as alterações.")
         else:
-            flash("Erro ao salvar a senha")
+            new_hash = hash_password(new)
+            if save_password_hash(new_hash):
+                ADMIN_PASSWORD_HASH = new_hash
+                try:
+                    os.remove(INITIAL_PASS_FILE)
+                except OSError:
+                    pass
+                logging.info("[CHANGE_PASS] ✓ Senha alterada com sucesso")
+                flash("✓ Senha alterada com sucesso. Saia para aplicar as alterações.")
+            else:
+                flash("Erro ao salvar a senha")
     except Exception as e:
         logging.error(f"[CHANGE_PASS] Erro: {e}", exc_info=True)
-        flash(f"Erro: {str(e)}")
+        flash("Erro ao alterar a senha")
     return redirect(url_for('dashboard'))
+
 
 @app.route('/update_now', methods=['POST'])
 @login_required
@@ -461,286 +751,218 @@ def update_now():
     try:
         logging.info("Iniciando atualização pelo painel web")
         results = perform_update()
-        
-        if results["backend"]["success"] or results["templates"]["success"]:
+        reload_ = results["backend"]["success"] or results["templates"]["success"]
+        if reload_:
             schedule_restart()
-            restart_msg = "O painel será reiniciado automaticamente em alguns segundos."
-        else:
-            restart_msg = ""
-        
-        success_count = sum(1 for k, v in results.items() if v["success"])
-        total_count = len(results)
-        
+        ok = sum(1 for v in results.values() if v["success"])
         return jsonify({
             "success": True,
-            "message": f"Atualização concluída: {success_count}/{total_count} componentes",
+            "message": f"Atualização concluída: {ok}/{len(results)} componentes",
             "details": results,
-            "restart": restart_msg,
-            "will_reload": results["backend"]["success"] or results["templates"]["success"]
-        })
+            "restart": "O painel será reiniciado automaticamente em alguns segundos." if reload_ else "",
+            "will_reload": reload_})
     except Exception as e:
         logging.error(f"Erro em atualização: {e}", exc_info=True)
-        return jsonify({"success": False, "message": f"Erro: {str(e)}"}), 500
+        return jsonify({"success": False, "message": "Erro durante a atualização"}), 500
+
 
 @app.route('/add_user', methods=['POST'])
 @login_required
 def add_user():
     try:
-        user = request.form['username'].strip().lower()
-        pwd = request.form['password']
-        days = int(request.form['days'])
-        
-        if not user or not pwd or days < 1:
-            flash("Todos os campos são obrigatórios e os dias devem ser positivos")
+        user = request.form.get('username', '').strip().lower()
+        pwd = request.form.get('password', '')
+        try:
+            days = int(request.form.get('days', ''))
+        except ValueError:
+            flash("Erro: Os dias devem ser um número válido")
             return redirect(url_for('dashboard'))
-        if not user.isalnum() and not all(c.isalnum() or c in '_-' for c in user):
-            flash("O usuário pode conter apenas letras, números, hifens e underlines")
+        if not valid_username(user):
+            flash("Usuário inválido: use letras minúsculas, números, '_' ou '-' (começando por letra ou '_')")
             return redirect(url_for('dashboard'))
-        
-        check_user = subprocess.run([ID, user], capture_output=True, text=True)
-        if check_user.returncode == 0:
+        if not valid_user_password(pwd):
+            flash("Senha inválida: 4 a 64 caracteres, sem ':' nem caracteres de controle")
+            return redirect(url_for('dashboard'))
+        if not (1 <= days <= 3650):
+            flash("Os dias devem estar entre 1 e 3650")
+            return redirect(url_for('dashboard'))
+        if system_user_exists(user):
             flash(f"O usuário '{user}' já existe no sistema")
             return redirect(url_for('dashboard'))
-        
-        check_group = subprocess.run([GETENT, 'group', 'hexusers'], capture_output=True, text=True)
-        if check_group.returncode != 0:
-            subprocess.run([GROUPADD, 'hexusers'], capture_output=True)
-        
-        exp_date = (datetime.datetime.now() + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
-        
-        res = subprocess.run([USERADD, '-m', '-s', '/bin/bash', '-G', 'hexusers', user], 
-                           capture_output=True, text=True)
-        if res.returncode != 0:
-            flash(f"Erro ao criar usuário: {res.stderr}")
-            return redirect(url_for('dashboard'))
-        
-        res_pwd = subprocess.run([CHPASSWD], input=f"{user}:{pwd}", text=True, capture_output=True)
-        if res_pwd.returncode != 0:
-            flash(f"Erro ao definir senha: {res_pwd.stderr}")
-            subprocess.run([USERDEL, '-r', user], capture_output=True)
-            return redirect(url_for('dashboard'))
-        
-        subprocess.run([CHAGE, '-E', exp_date, user], capture_output=True)
-        subprocess.run([USERMOD, '-e', exp_date, user], capture_output=True)
-        
-        with open("/etc/hex/users.txt", "a") as f: 
-            f.write(f"{user}:{pwd}:{exp_date}\n")
-        
-        flash(f"✓ Usuário '{user}' criado com sucesso (Expira: {exp_date})")
-        return redirect(url_for('dashboard'))
-    except ValueError:
-        flash("Erro: Os dias devem ser um número válido")
-        return redirect(url_for('dashboard'))
-    except Exception as e:
-        logging.error(f"Erro criando usuário: {str(e)}", exc_info=True)
-        flash(f"Erro inesperado: {str(e)}")
-        return redirect(url_for('dashboard'))
 
-@app.route('/delete_user/<username>')
+        if run([GETENT, 'group', USER_GROUP]).returncode != 0:
+            run([GROUPADD, USER_GROUP])
+        exp_date = (datetime.datetime.now() + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
+        res = run([USERADD, '-m', '-s', get_user_shell(), '-G', USER_GROUP, user])
+        if res.returncode != 0:
+            logging.error(f"useradd falhou: {res.stderr}")
+            flash("Erro ao criar usuário")
+            return redirect(url_for('dashboard'))
+        res = run([CHPASSWD], input=f"{user}:{pwd}\n")
+        if res.returncode != 0:
+            logging.error(f"chpasswd falhou: {res.stderr}")
+            run([USERDEL, '-r', user])
+            flash("Erro ao definir a senha")
+            return redirect(url_for('dashboard'))
+        set_expiry(user, exp_date)
+        with DbLock():
+            entries = [e for e in read_db() if e[0] != user]
+            entries.append((user, pwd, exp_date))
+            write_db(entries)
+        logging.info(f"Usuário criado: {user} (exp {exp_date}) por {request.remote_addr}")
+        flash(f"✓ Usuário '{user}' criado com sucesso (Expira: {exp_date})")
+    except Exception as e:
+        logging.error(f"Erro criando usuário: {e}", exc_info=True)
+        flash("Erro inesperado ao criar usuário")
+    return redirect(url_for('dashboard'))
+
+
+def _managed_or_flash(username):
+    """Só permite mexer em contas que estão no users.txt."""
+    if not valid_username(username) or not db_has(username):
+        flash(f"O usuário '{username}' não é gerenciado por este painel")
+        return False
+    return True
+
+
+@app.route('/delete_user/<username>', methods=['POST'])
 @login_required
 def delete_user(username):
     try:
-        subprocess.run([USERDEL, '-r', username], capture_output=True)
-        if os.path.exists("/etc/hex/users.txt"):
-            with open("/etc/hex/users.txt", "r") as f:
-                lines = f.readlines()
-            with open("/etc/hex/users.txt", "w") as f:
-                for line in lines:
-                    if not line.startswith(f"{username}:"):
-                        f.write(line)
+        if not _managed_or_flash(username):
+            return redirect(url_for('dashboard'))
+        run([PKILL, '-KILL', '-u', username])
+        res = run([USERDEL, '-r', username])
+        if res.returncode != 0 and system_user_exists(username):
+            logging.error(f"userdel falhou para {username}: {res.stderr}")
+            flash(f"Erro ao remover '{username}'")
+            return redirect(url_for('dashboard'))
+        with DbLock():
+            write_db([e for e in read_db() if e[0] != username])
+        logging.info(f"Usuário removido: {username} por {request.remote_addr}")
         flash(f"✓ Usuário '{username}' removido com sucesso")
     except Exception as e:
-        logging.error(f"Erro removendo usuário: {e}")
-        flash(f"Erro ao remover usuário: {str(e)}")
+        logging.error(f"Erro removendo usuário: {e}", exc_info=True)
+        flash("Erro ao remover usuário")
     return redirect(url_for('dashboard'))
+
 
 @app.route('/edit_password/<username>', methods=['POST'])
 @login_required
 def edit_password(username):
-    """Altera a senha de um usuário pelo dashboard"""
     try:
-        new_pass = request.form.get('new_password', '')
-        confirm_pass = request.form.get('confirm_password', '')
-        
+        new = request.form.get('new_password', '')
+        conf = request.form.get('confirm_password', '')
         logging.info(f"[EDIT_PASS] Troca de senha para {username} de {request.remote_addr}")
-        
-        if not new_pass or len(new_pass) < 4:
-            flash("A senha deve ter pelo menos 4 caracteres")
+        if not _managed_or_flash(username):
             return redirect(url_for('dashboard'))
-        
-        if new_pass != confirm_pass:
+        if not valid_user_password(new):
+            flash("Senha inválida: 4 a 64 caracteres, sem ':' nem caracteres de controle")
+        elif new != conf:
             flash("As novas senhas não coincidem")
-            return redirect(url_for('dashboard'))
-        
-        check_user = subprocess.run([ID, username], capture_output=True, text=True)
-        if check_user.returncode != 0:
-            flash(f"O usuário '{username}' não existe")
-            return redirect(url_for('dashboard'))
-        
-        res_pwd = subprocess.run([CHPASSWD], input=f"{username}:{new_pass}", 
-                                text=True, capture_output=True)
-        if res_pwd.returncode != 0:
-            flash(f"Erro ao alterar senha: {res_pwd.stderr}")
-            return redirect(url_for('dashboard'))
-        
-        if os.path.exists("/etc/hex/users.txt"):
-            with open("/etc/hex/users.txt", "r") as f:
-                lines = f.readlines()
-            with open("/etc/hex/users.txt", "w") as f:
-                for line in lines:
-                    if line.startswith(f"{username}:"):
-                        parts = line.strip().split(":")
-                        if len(parts) == 3:
-                            f.write(f"{username}:{new_pass}:{parts[2]}\n")
-                        else:
-                            f.write(line)
-                    else:
-                        f.write(line)
-        
-        logging.info(f"[EDIT_PASS] ✓ Senha de {username} alterada")
-        flash(f"✓ Senha de '{username}' alterada com sucesso")
-        
+        elif not system_user_exists(username):
+            flash(f"O usuário '{username}' não existe no sistema")
+        else:
+            res = run([CHPASSWD], input=f"{username}:{new}\n")
+            if res.returncode != 0:
+                logging.error(f"chpasswd falhou: {res.stderr}")
+                flash("Erro ao alterar a senha")
+            else:
+                with DbLock():
+                    write_db([(u, new if u == username else p, e) for u, p, e in read_db()])
+                flash(f"✓ Senha de '{username}' alterada com sucesso")
     except Exception as e:
         logging.error(f"[EDIT_PASS] Erro: {e}", exc_info=True)
-        flash(f"Erro: {str(e)}")
-    
+        flash("Erro ao alterar a senha")
     return redirect(url_for('dashboard'))
+
 
 @app.route('/edit_expiry/<username>', methods=['POST'])
 @login_required
 def edit_expiry(username):
-    """Altera a data de expiração de um usuário pelo dashboard"""
     try:
         action = request.form.get('action', '')
-        
         logging.info(f"[EDIT_EXP] Troca de expiração para {username} de {request.remote_addr}")
-        
-        check_user = subprocess.run([ID, username], capture_output=True, text=True)
-        if check_user.returncode != 0:
-            flash(f"O usuário '{username}' não existe")
+        if not _managed_or_flash(username):
             return redirect(url_for('dashboard'))
-        
-        new_exp = ""
-        
+        if not system_user_exists(username):
+            flash(f"O usuário '{username}' não existe no sistema")
+            return redirect(url_for('dashboard'))
+
+        current = next((e for u, _, e in read_db() if u == username), "")
+        new_exp, msg = "", ""
         if action == "permanent":
-            subprocess.run([CHAGE, '-E', '-1', username], capture_output=True)
-            subprocess.run([USERMOD, '-e', '', username], capture_output=True)
-            new_exp = "2099-12-31"
-            flash(f"✓ Usuário '{username}' agora é permanente")
-            
+            new_exp, msg = "2099-12-31", f"✓ Usuário '{username}' agora é permanente"
         elif action == "custom":
-            custom_date = request.form.get('custom_date', '')
-            if not custom_date:
-                flash("Você deve inserir uma data")
+            custom = request.form.get('custom_date', '')
+            if not valid_date(custom):
+                flash("Data inválida. Use o formato AAAA-MM-DD")
                 return redirect(url_for('dashboard'))
-            new_exp = custom_date
-            subprocess.run([CHAGE, '-E', new_exp, username], capture_output=True)
-            subprocess.run([USERMOD, '-e', new_exp, username], capture_output=True)
-            flash(f"✓ Expiração de '{username}' alterada para {new_exp}")
-            
-        elif action.startswith("extend_"):
-            days = int(action.split("_")[1])
-            
-            current_exp = ""
-            if os.path.exists("/etc/hex/users.txt"):
-                with open("/etc/hex/users.txt", "r") as f:
-                    for line in f:
-                        if line.startswith(f"{username}:"):
-                            parts = line.strip().split(":")
-                            if len(parts) == 3:
-                                current_exp = parts[2]
-                            break
-            
-            current_timestamp = int(time.time())
-            exp_timestamp = 0
-            try:
-                exp_timestamp = int(datetime.datetime.strptime(current_exp, "%Y-%m-%d").timestamp())
-            except:
-                pass
-            
-            if exp_timestamp < current_timestamp:
-                new_exp = (datetime.datetime.now() + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
-            else:
-                new_exp = (datetime.datetime.strptime(current_exp, "%Y-%m-%d") + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
-            
-            subprocess.run([CHAGE, '-E', new_exp, username], capture_output=True)
-            subprocess.run([USERMOD, '-e', new_exp, username], capture_output=True)
-            flash(f"✓ Expiração de '{username}' estendida para {new_exp} (+{days} dias)")
-            
+            new_exp, msg = custom, f"✓ Expiração de '{username}' alterada para {custom}"
+        elif re.fullmatch(r'extend_[0-9]{1,4}', action):
+            days = int(action.split('_')[1])
+            base = datetime.datetime.now()
+            if valid_date(current):
+                cur_dt = datetime.datetime.strptime(current, "%Y-%m-%d")
+                if cur_dt > base:
+                    base = cur_dt
+            new_exp = (base + datetime.timedelta(days=days)).strftime("%Y-%m-%d")
+            msg = f"✓ Expiração de '{username}' estendida para {new_exp} (+{days} dias)"
         else:
             flash("Ação inválida")
             return redirect(url_for('dashboard'))
-        
-        if new_exp and os.path.exists("/etc/hex/users.txt"):
-            with open("/etc/hex/users.txt", "r") as f:
-                lines = f.readlines()
-            with open("/etc/hex/users.txt", "w") as f:
-                for line in lines:
-                    if line.startswith(f"{username}:"):
-                        parts = line.strip().split(":")
-                        if len(parts) == 3:
-                            f.write(f"{username}:{parts[1]}:{new_exp}\n")
-                        else:
-                            f.write(line)
-                    else:
-                        f.write(line)
-        
+
+        set_expiry(username, new_exp)
+        with DbLock():
+            write_db([(u, p, new_exp if u == username else e) for u, p, e in read_db()])
         logging.info(f"[EDIT_EXP] ✓ Expiração de {username} alterada para {new_exp}")
-        
+        flash(msg)
     except Exception as e:
         logging.error(f"[EDIT_EXP] Erro: {e}", exc_info=True)
-        flash(f"Erro: {str(e)}")
-    
+        flash("Erro ao alterar a expiração")
     return redirect(url_for('dashboard'))
 
-@app.route('/control_service/<svc>/<action>')
+
+@app.route('/control_service/<svc>/<action>', methods=['POST'])
 @login_required
 def control_service(svc, action):
     try:
-        if svc not in ['bhttp', 'hcr', 'udpgw']:
+        if svc not in SERVICES:
             flash(f"Serviço inválido: {svc}")
             return redirect(url_for('dashboard'))
-        if action not in ['start', 'stop', 'restart']:
+        if action not in ('start', 'stop', 'restart'):
             flash(f"Ação inválida: {action}")
             return redirect(url_for('dashboard'))
-        
-        conf_file = f"/etc/hex/{svc}_ports.conf"
-        if not os.path.exists(conf_file):
-            flash(f"Não há portas configuradas para {svc.upper()}")
-            return redirect(url_for('dashboard'))
-        
-        with open(conf_file, 'r') as f:
-            ports = [p.strip() for p in f.readlines() if p.strip()]
-        
+        ports = read_ports(svc)
         if not ports:
             flash(f"Não há portas configuradas para {svc.upper()}")
             return redirect(url_for('dashboard'))
-        
-        success_count = 0
-        error_count = 0
+        ok = err = 0
         for port in ports:
-            service_name = f"{svc}@{port}.service"
-            result = subprocess.run([SYSTEMCTL, action, service_name], capture_output=True, text=True)
-            if result.returncode == 0:
-                success_count += 1
+            r = run([SYSTEMCTL, action, f"{svc}@{port}.service"])
+            if r.returncode == 0:
+                ok += 1
             else:
-                error_count += 1
-        
-        # Traduz a ação apenas para exibir o flash com mais coesão ("start" -> "Start", etc.)
-        acao_traduzida = action.capitalize()
-        if action == 'start': acao_traduzida = "Início"
-        elif action == 'stop': acao_traduzida = "Parada"
-        elif action == 'restart': acao_traduzida = "Reinício"
-
-        if error_count == 0:
-            flash(f"✓ {svc.upper()}: Ação '{acao_traduzida}' com sucesso em {success_count} porta(s)")
+                err += 1
+        label = {"start": "Início", "stop": "Parada", "restart": "Reinício"}[action]
+        if err == 0:
+            flash(f"✓ {svc.upper()}: Ação '{label}' com sucesso em {ok} porta(s)")
         else:
-            flash(f"⚠ {svc.upper()}: {success_count} com sucesso, {error_count} erro(s)")
+            flash(f"⚠ {svc.upper()}: {ok} com sucesso, {err} erro(s)")
     except Exception as e:
         logging.error(f"Erro ao controlar o serviço: {e}")
-        flash(f"Erro: {str(e)}")
+        flash("Erro ao controlar o serviço")
     return redirect(url_for('dashboard'))
 
+
+# ───────────────────────── main ─────────────────────────
 if __name__ == '__main__':
-    web_port = get_webpanel_port()
-    app.run(host='0.0.0.0', port=web_port, debug=False)
+    host = os.environ.get("HEX_PANEL_HOST", "0.0.0.0")
+    port = get_webpanel_port()
+    try:
+        from waitress import serve
+        logging.info(f"Painel (waitress) em {host}:{port}")
+        serve(app, host=host, port=port, threads=4)
+    except ImportError:
+        logging.warning("waitress não instalado; usando o servidor de desenvolvimento do Flask")
+        app.run(host=host, port=port, debug=False)

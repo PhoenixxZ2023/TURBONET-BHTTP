@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-#  PAINEL WEB - INSTALADOR (v1.1.0)
+#  PAINEL WEB - INSTALADOR (v1.1.2)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #
 #  - baixa app.py e templates do repositório (com SHA256 do version.json)
@@ -8,6 +8,10 @@
 #    em texto puro e injeção de comando)
 #  - a senha inicial é gerada ALEATORIAMENTE pelo painel no primeiro start
 #  - pode ser executado de novo para atualizar sem perder senha/usuários
+#  - instalação NOVA já sai com HTTPS ligado (certificado autoassinado criado
+#    sozinho); para pular: HEX_INSTALL_HTTPS=0 bash install_webpanel.sh
+#  - o modo de acesso depois se muda pelo menu (Painel Web > 8) ou por
+#    hex_panel_mode.sh, sem editar arquivo nenhum
 # ═══════════════════════════════════════════════════════════════
 set -o pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -96,8 +100,8 @@ criar_estrutura() {
         ui_info "Criando ambiente virtual do Python..."
         python3 -m venv "$PANEL_DIR/venv" >>"$LOG_FILE" 2>&1 || { ui_error "Falha ao criar o venv"; exit 1; }
     fi
-    ui_info "Instalando Flask, bcrypt, psutil e waitress..."
-    "$PANEL_DIR/venv/bin/pip" install --quiet flask flask-login psutil bcrypt waitress >>"$LOG_FILE" 2>&1 \
+    ui_info "Instalando Flask, bcrypt, psutil, waitress e cheroot..."
+    "$PANEL_DIR/venv/bin/pip" install --quiet flask flask-login psutil bcrypt waitress cheroot >>"$LOG_FILE" 2>&1 \
         || { ui_error "Falha no pip install (veja $LOG_FILE)"; exit 1; }
     [ -f "$PORT_FILE" ] || echo "9000" > "$PORT_FILE"
     chmod 644 "$PORT_FILE"
@@ -115,6 +119,8 @@ baixar_aplicacao() {
     baixar_verificado "app.py" "$PANEL_DIR/app.py" 644 || exit 1
     baixar_verificado "templates/login.html" "$PANEL_DIR/templates/login.html" 644 || exit 1
     baixar_verificado "templates/dashboard.html" "$PANEL_DIR/templates/dashboard.html" 644 || exit 1
+    baixar_verificado "hex_ip.sh" /usr/local/bin/hex_ip.sh 755 || exit 1
+    baixar_verificado "hex_panel_mode.sh" /usr/local/bin/hex_panel_mode.sh 755 || exit 1
     "$PANEL_DIR/venv/bin/python" -m py_compile "$PANEL_DIR/app.py" || { ui_error "app.py com erro de sintaxe"; exit 1; }
     local v
     v=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("version",""))' "$MANIFEST" 2>/dev/null)
@@ -154,18 +160,27 @@ EOT
     iptables -C INPUT -p tcp --dport "$PANEL_PORT" -j ACCEPT 2>/dev/null \
         || iptables -I INPUT -p tcp --dport "$PANEL_PORT" -j ACCEPT 2>/dev/null
     command -v ufw >/dev/null 2>&1 && ufw allow "$PANEL_PORT/tcp" >/dev/null 2>&1
+    local fresh=0
+    [ -s "$HEX_DIR/webpanel_admin_pass.conf" ] || fresh=1
     ui_info "Iniciando painel web..."
     systemctl restart hex-webpanel.service
     sleep 2
     if systemctl is-active --quiet hex-webpanel.service; then ui_ok "Painel web ativo"
     else ui_error "O painel não pôde iniciar (journalctl -u hex-webpanel -n 50)"; fi
+    # instalação nova: liga o HTTPS sozinho (se falhar, o próprio script volta para HTTP)
+    if [ "$fresh" = "1" ] && [ "${HEX_INSTALL_HTTPS:-1}" != "0" ]; then
+        ui_info "Ativando HTTPS (certificado autoassinado, automático)..."
+        if /usr/local/bin/hex_panel_mode.sh https >>"$LOG_FILE" 2>&1; then ui_ok "HTTPS ativado"
+        else ui_warn "Não foi possível ativar o HTTPS agora; o painel segue em HTTP (menu: Painel Web > 8)"; fi
+    fi
     sleep 1
 }
 
 mostrar_resumo() {
     clear; ui_top; ui_titulo "5/5 ✓ INSTALAÇÃO CONCLUÍDA"; ui_sep
     ui_fila ""
-    ui_fila " ${BOLD}URL:${NC} ${CYAN}http://$(hostname -I | awk '{print $1}'):${PANEL_PORT}${NC}"
+    local url; url=$(/usr/local/bin/hex_panel_mode.sh url 2>/dev/null)
+    ui_fila " ${BOLD}URL:${NC} ${CYAN}${url:-http://$(/usr/local/bin/hex_ip.sh 2>/dev/null || hostname -I | awk '{print $1}'):${PANEL_PORT}}${NC}"
     local i=0 pass=""
     while [ $i -lt 15 ] && [ ! -f "$INITIAL_PASS_FILE" ] && [ ! -s "$HEX_DIR/webpanel_admin_pass.conf" ]; do sleep 1; i=$((i+1)); done
     if [ -f "$INITIAL_PASS_FILE" ]; then
@@ -176,8 +191,13 @@ mostrar_resumo() {
         ui_fila " ${BOLD}Senha:${NC} a que você já configurou (mantida)"
     fi
     ui_fila ""
-    ui_fila " ${YELLOW}Dica:${NC} para expor só via proxy/TLS, crie $HEX_DIR/webpanel.env com"
-    ui_fila "       HEX_PANEL_HOST=127.0.0.1  e reinicie o serviço."
+    if [[ "$url" == https://* ]]; then
+        ui_fila " ${YELLOW}O navegador vai avisar \"conexão não é particular\"${NC} (certificado criado"
+        ui_fila " por este servidor). É normal: ${BOLD}Avançado → Continuar${NC}. A senha vai criptografada."
+    else
+        ui_fila " ${YELLOW}Painel em HTTP simples.${NC} Para criptografar a senha: ${BOLD}hex_menu → Painel Web → 8${NC}"
+    fi
+    [[ "$url" == https://* ]] && ui_fila " Mudar o modo de acesso depois: ${BOLD}hex_menu → Painel Web → 8${NC}"
     ui_fila ""; ui_bot; echo ""
 }
 

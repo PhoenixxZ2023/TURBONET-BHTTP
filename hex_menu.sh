@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ═══════════════════════════════════════════════════════════════
-#  MANAGER - MENU DE GERENCIAMENTO COMPLETO (v1.1.0)
+#  MANAGER - MENU DE GERENCIAMENTO COMPLETO (v1.1.2)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #  Com sistema de atualização automática e porta web configurável
 # ═══════════════════════════════════════════════════════════════
@@ -315,6 +315,8 @@ hex_atualizar_menu() {
     hex_instalar_arquivo hex_menu.sh /usr/local/bin/hex_menu 755 sh || return 1
     ui_ok "Menu atualizado"
     hex_instalar_arquivo hex_cleanup.sh "$CLEANUP_SCRIPT" 755 sh && ui_ok "Script de limpeza atualizado"
+    hex_instalar_arquivo hex_panel_mode.sh /usr/local/bin/hex_panel_mode.sh 755 sh && ui_ok "Módulo de segurança do painel atualizado"
+    hex_instalar_arquivo hex_ip.sh /usr/local/bin/hex_ip.sh 755 sh && ui_ok "Detector de IP público atualizado"
     return 0
 }
 hex_atualizar_templates() {
@@ -430,11 +432,104 @@ ver_changelog() {
 #  MUDAR PORTA DO PAINEL WEB
 # ═══════════════════════════════════════════════════════════════
 
+# ── modo de acesso do painel (HTTPS automático) ──
+# IPv4 público da VPS (hex_ip.sh); sem o script, cai para o primeiro IP local
+ip_publico() {
+    local ip
+    ip=$(/usr/local/bin/hex_ip.sh 2>/dev/null)
+    echo "${ip:-$(hostname -I | awk '{print $1}')}"
+}
+painel_url() {
+    local u
+    u=$(/usr/local/bin/hex_panel_mode.sh url 2>/dev/null)
+    echo "${u:-http://$(ip_publico):$WEBPANEL_PORT}"
+}
+ip_script_ok() {
+    local sc=/usr/local/bin/hex_ip.sh
+    if [ ! -x "$sc" ]; then
+        ui_info "Baixando o detector de IP..."
+        if hex_obter_manifesto; then
+            hex_instalar_arquivo hex_ip.sh "$sc" 755 sh
+            rm -f "$HEX_MANIFEST"
+        fi
+    fi
+    [ -x "$sc" ]
+}
+menu_ip_servidor() {
+    local sc=/usr/local/bin/hex_ip.sh ip
+    while true; do
+        clear; ui_top; ui_titulo "IP DA VPS (usado nas URLs e nas mensagens)"; ui_sep; ui_fila ""
+        if ! ip_script_ok; then ui_error "Não foi possível obter o detector de IP"; pause_return; return; fi
+        "$sc" status | while IFS= read -r linha; do ui_fila "  $linha"; done
+        if "$sc" nat 2>/dev/null; then
+            ui_fila ""
+            ui_fila "  ${YELLOW}⚠ Libere também no firewall do PROVEDOR (Security List/Group):${NC}"
+            ui_fila "    BHTTP: $(paste -sd, "$BHTTP_PORTS_CONF" 2>/dev/null)  HCR: $(paste -sd, "$HCR_PORTS_CONF" 2>/dev/null)  Painel: $WEBPANEL_PORT"
+        fi
+        ui_fila ""; ui_sep; ui_fila ""
+        ui_opcion "1" "Descobrir o IP de novo"
+        ui_opcion "2" "Definir o IP manualmente"
+        ui_opcion "3" "Voltar à detecção automática"
+        ui_opcion "0" "Voltar"
+        ui_bot; echo ""; echo -ne "  ${CYAN}►${NC} Selecione a opção: "; read -r opt
+        case "$opt" in
+            1) ip=$("$sc" refresh); echo -e "  ${GREEN}✓ IP detectado: $ip${NC}"; pause_return ;;
+            2) echo -ne "  ${WHITE}IPv4 da VPS:${NC} "; read -r ip
+               if "$sc" set "$ip" >/dev/null 2>&1; then echo -e "  ${GREEN}✓ IP definido: $ip${NC}"
+               else echo -e "  ${RED}✗ IPv4 inválido${NC}"; fi; pause_return ;;
+            3) ip=$("$sc" unset); echo -e "  ${GREEN}✓ Detecção automática: $ip${NC}"; pause_return ;;
+            0) return ;;
+            *) echo -e "  ${RED}✗ Opção inválida${NC}"; pause_return ;;
+        esac
+    done
+}
+painel_modo_script() {
+    local sc=/usr/local/bin/hex_panel_mode.sh
+    if [ ! -x "$sc" ]; then
+        ui_info "Baixando o módulo de segurança do painel..."
+        if hex_obter_manifesto; then
+            hex_instalar_arquivo hex_panel_mode.sh "$sc" 755 sh
+            rm -f "$HEX_MANIFEST"
+        fi
+    fi
+    [ -x "$sc" ]
+}
+menu_seguranca_painel() {
+    local sc=/usr/local/bin/hex_panel_mode.sh
+    while true; do
+        clear; ui_top; ui_titulo "SEGURANÇA DO ACESSO AO PAINEL"; ui_sep; ui_fila ""
+        if ! painel_modo_script; then
+            ui_error "Não foi possível obter o módulo (sem internet?)"; pause_return; return
+        fi
+        "$sc" status | while IFS= read -r linha; do ui_fila "  $linha"; done
+        ui_fila ""; ui_sep; ui_fila ""
+        ui_opcion "1" "Ativar HTTPS ${GREEN}(recomendado)${NC} - criptografa a senha"
+        ui_opcion "2" "Voltar para HTTP simples"
+        ui_opcion "3" "Gerar novo certificado HTTPS"
+        ui_opcion "4" "Somente local (127.0.0.1) ${GRIS}- avançado${NC}"
+        ui_opcion "5" "Liberar acesso externo"
+        ui_opcion "0" "Voltar"
+        ui_bot; echo ""; echo -ne "  ${CYAN}►${NC} Selecione a opção: "; read -r opt
+        case "$opt" in
+            1) echo ""; "$sc" https; WEBPANEL_PORT=$(cat "$WEBPANEL_PORT_FILE" 2>/dev/null || echo 9000); pause_return ;;
+            2) echo -ne "  ${YELLOW}⚠ A senha do painel voltará a trafegar sem criptografia. Continuar? (s/n):${NC} "; read -r c
+               if [ "$c" = "s" ] || [ "$c" = "S" ]; then echo ""; "$sc" http; fi; pause_return ;;
+            3) echo ""; "$sc" https --renew; pause_return ;;
+            4) echo -e "  ${YELLOW}⚠ O painel deixará de abrir por IP:PORTA. Você só acessará por túnel SSH ou proxy.${NC}"
+               echo -ne "  ${YELLOW}Continuar? (s/n):${NC} "; read -r c
+               if [ "$c" = "s" ] || [ "$c" = "S" ]; then echo ""; "$sc" local; fi; pause_return ;;
+            5) echo ""; "$sc" external; pause_return ;;
+            0) return ;;
+            *) echo -e "  ${RED}✗ Opção inválida${NC}"; pause_return ;;
+        esac
+    done
+}
+
 mudar_porta_webpanel() {
     clear; ui_top; ui_titulo "MUDAR PORTA DO PAINEL"; ui_sep; ui_fila ""
     
     ui_fila "  ${BOLD}Porta atual:${NC} ${YELLOW}$WEBPANEL_PORT${NC}"
-    ui_fila "  ${GRIS}URL atual: http://$(hostname -I | awk '{print $1}'):$WEBPANEL_PORT${NC}"
+    ui_fila "  ${GRIS}URL atual: $(painel_url)${NC}"
     ui_fila ""
     ui_sep; ui_fila ""
     
@@ -496,7 +591,7 @@ mudar_porta_webpanel() {
         ui_ok "Porta alterada com sucesso"
         ui_fila ""
         ui_fila "  ${BOLD}Nova porta:${NC}  ${YELLOW}$new_port${NC}"
-        ui_fila "  ${BOLD}Nova URL:${NC}    ${CYAN}http://$(hostname -I | awk '{print $1}'):$new_port${NC}"
+        ui_fila "  ${BOLD}Nova URL:${NC}    ${CYAN}$(painel_url)${NC}"
         ui_fila ""
         ui_fila "  ${YELLOW}⚠ Use a nova URL para acessar o painel${NC}"
     else
@@ -532,6 +627,7 @@ menu_principal() {
     ui_fila "  ${CYAN}UDPGW${NC}      - $udpgw_st"
     ui_fila "  ${CYAN}PAINEL WEB${NC} - Porta $WEBPANEL_PORT     $webpanel_status"
     ui_fila "  ${CYAN}LIMPADOR${NC}   - Diário 03:00   $cleanup_status"
+    ui_fila "  ${CYAN}IP DA VPS${NC}   - $(ip_publico)"
     ui_fila "  ${CYAN}VERSÃO${NC}     - v$HEX_VERSION"
     ui_fila ""; ui_sep
     
@@ -543,6 +639,7 @@ menu_principal() {
     ui_opcion "6" "Ver logs"
     ui_opcion "7" "Buscar atualizações"
     ui_opcion "8" "Desinstalar tudo"
+    ui_opcion "9" "IP da VPS (ver / atualizar / definir)"
     ui_opcion "0" "Sair"
     
     ui_bot; echo ""
@@ -557,6 +654,7 @@ menu_principal() {
         6) ver_logs ;;
         7) menu_atualizacoes ;;
         8) desinstalar ;;
+        9) menu_ip_servidor ;;
         0) exit 0 ;;
         *) echo -e "  ${RED}✗ Opção inválida${NC}"; pause_return; menu_principal ;;
     esac
@@ -746,7 +844,7 @@ gerenciar_webpanel() {
             [ "$webpanel_state" = "active" ] && webpanel_status="${GREEN}● ATIVO${NC}" || webpanel_status="${RED}● INATIVO${NC}"
             
             ui_fila "  Estado: $webpanel_status  │  Porta: ${YELLOW}$WEBPANEL_PORT${NC}"
-            ui_fila "  URL: ${CYAN}http://$(hostname -I | awk '{print $1}'):$WEBPANEL_PORT${NC}"
+            ui_fila "  URL: ${CYAN}$(painel_url)${NC}"
             ui_sep; ui_fila ""
             
             ui_opcion "1" "Iniciar Painel Web"
@@ -756,6 +854,7 @@ gerenciar_webpanel() {
             ui_opcion "5" "Mudar porta do painel"
             ui_opcion "6" "Ver logs do painel"
             ui_opcion "7" "Desinstalar Painel Web"
+            ui_opcion "8" "Segurança do acesso (HTTPS)"
             ui_opcion "0" "Voltar"
             
             ui_bot; echo ""; echo -ne "  ${CYAN}►${NC} Selecione a opção: "; read -r opt
@@ -766,6 +865,7 @@ gerenciar_webpanel() {
                 3) systemctl restart hex-webpanel.service; echo -e "  ${GREEN}✓ Painel Web reiniciado${NC}"; pause_return ;;
                 4) echo ""; systemctl status hex-webpanel.service --no-pager; pause_return ;;
                 5) mudar_porta_webpanel ;;
+                8) menu_seguranca_painel ;;
                 6) echo ""; journalctl -u hex-webpanel.service -n 50 --no-pager; pause_return ;;
                 7)
                     echo -e "  ${CYAN}Desinstalando Painel Web...${NC}"
@@ -862,7 +962,7 @@ adicionar_usuario() {
     ( db_lock; printf '%s:%s:%s\n' "$new_user" "$new_pass" "$exp_date" >> "$USER_DB" )
 
     echo ""; echo -e "  ${GREEN}✓ Usuário criado${NC}"
-    echo -e "  ${BOLD}IP:${NC} $(hostname -I | awk '{print $1}')"
+    echo -e "  ${BOLD}IP:${NC} $(ip_publico)"
     echo -e "  ${BOLD}Usuário:${NC} ${YELLOW}${new_user}${NC} | ${BOLD}Senha:${NC} ${YELLOW}${new_pass}${NC} | ${BOLD}Expira em:${NC} ${YELLOW}${exp_date}${NC}"; echo ""
     pause_return
 }

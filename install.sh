@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-#  MANAGER - INSTALADOR AUTOMÁTICO (Múltiplas Portas) v1.1.0
+#  MANAGER - INSTALADOR AUTOMÁTICO (Múltiplas Portas) v1.1.2
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #
 #  Mudanças em relação à v1.0.1:
@@ -253,6 +253,8 @@ instalar_menu_e_limpeza() {
     rm -f /usr/bin/hex_menu   # cópia antiga de instalações anteriores
     ui_info "Instalando script de limpeza (v2)..."
     baixar_verificado "hex_cleanup.sh" /usr/local/bin/hex_cleanup.sh 755 && ui_ok "Script de limpeza instalado" || ui_error "Falha ao baixar a limpeza"
+    baixar_verificado "hex_ip.sh" /usr/local/bin/hex_ip.sh 755 && ui_ok "Detector de IP público instalado" || ui_error "Falha ao baixar hex_ip.sh"
+    baixar_verificado "hex_panel_mode.sh" /usr/local/bin/hex_panel_mode.sh 755 && ui_ok "Módulo de segurança do painel instalado" || ui_error "Falha ao baixar hex_panel_mode.sh"
     touch /var/log/hex-cleanup.log && chmod 644 /var/log/hex-cleanup.log
     ( crontab -l 2>/dev/null | grep -v "hex_cleanup.sh"; echo "0 3 * * * /usr/local/bin/hex_cleanup.sh" ) | crontab -
     ui_ok "Limpeza automática ativada (diariamente às 03:00)"
@@ -287,20 +289,33 @@ estado_servico() {   # estado_servico <svc> <conf>  → "ATIVO (2/2)" etc.
     else echo -e "${RED}● INATIVO${NC} (0/$total)"; fi
 }
 
+portas_para_liberar() {
+    local b h p
+    b=$(paste -sd, "$HEX_DIR/bhttp_ports.conf" 2>/dev/null); h=$(paste -sd, "$HEX_DIR/hcr_ports.conf" 2>/dev/null)
+    p=$(cat "$HEX_DIR/webpanel_port.conf" 2>/dev/null || echo 9000)
+    echo "TCP ${b:+$b (BHTTP) }${h:+$h (HCR) }$p (painel)"
+}
+
 mostrar_resumo() {
     clear; ui_top; ui_titulo "✓ INSTALAÇÃO CONCLUÍDA"; ui_sep; ui_fila ""
     ui_fila " ${CYAN}BHTTP${NC}  - $(estado_servico bhttp "$HEX_DIR/bhttp_ports.conf")"
     ui_fila " ${CYAN}HCR${NC}    - $(estado_servico hcr "$HEX_DIR/hcr_ports.conf")"
     ui_fila " ${CYAN}UDPGW${NC}  - $(estado_servico udpgw "$HEX_DIR/udpgw_ports.conf") ${GRIS}(escuta em ${UDPGW_BIND})${NC}"
     local pstate; systemctl is-active --quiet hex-webpanel.service && pstate="${GREEN}● ATIVO${NC}" || pstate="${RED}● INATIVO${NC}"
-    ui_fila " ${CYAN}PAINEL${NC} - $pstate  ${GRIS}http://$(hostname -I | awk '{print $1}'):$(cat "$HEX_DIR/webpanel_port.conf" 2>/dev/null || echo 9000)${NC}"
+    ui_fila " ${CYAN}PAINEL${NC} - $pstate  ${GRIS}$(/usr/local/bin/hex_panel_mode.sh url 2>/dev/null || echo "http://$(/usr/local/bin/hex_ip.sh 2>/dev/null || hostname -I | awk '{print $1}'):9000")${NC}"
     if [ -f "$INITIAL_PASS_FILE" ]; then
         ui_fila " ${BOLD}Senha inicial do painel:${NC} ${YELLOW}$(sed -n 's/^Senha inicial do painel: //p' "$INITIAL_PASS_FILE")${NC}"
         ui_fila " ${RED}⚠ Troque no dashboard.${NC} ${GRIS}($INITIAL_PASS_FILE)${NC}"
     fi
     ui_fila ""; ui_sep
     ui_fila " ${BOLD}Comando:${NC} ${YELLOW}hex_menu | bhttp | hcr${NC}"
-    ui_fila " ${BOLD}IP:${NC} ${YELLOW}$(hostname -I | awk '{print $1}')${NC}"
+    ui_fila " ${BOLD}IP:${NC} ${YELLOW}$(/usr/local/bin/hex_ip.sh 2>/dev/null || hostname -I | awk '{print $1}')${NC}"
+    if /usr/local/bin/hex_ip.sh nat 2>/dev/null; then
+        ui_fila ""
+        ui_fila " ${YELLOW}⚠ Sua VPS está atrás de NAT (a placa de rede só tem IP privado).${NC}"
+        ui_fila "   Libere também no firewall do PROVEDOR (Security List / Security Group):"
+        ui_fila "   ${BOLD}$(portas_para_liberar)${NC}"
+    fi
     ui_fila " ${BOLD}Repo:${NC} ${CYAN}github.com/PhoenixxZ2023/TURBONET-BHTTP${NC}"
     ui_fila ""; ui_bot; echo ""
 }

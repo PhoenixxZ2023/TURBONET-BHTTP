@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.1.3] - 2026-10-07
+
+### Corrigido
+- O instalador, o menu e o painel mostravam o IP **privado** da VPS (`hostname -I | awk '{print $1}'`), ou até um IPv6, em VPS de nuvem atrás de NAT. Isso levava o usuário a configurar o cliente VPN e o navegador com o IP errado. Agora tudo usa o IPv4 público
+- Certificado HTTPS do painel passa a incluir o IP público no SAN
+
+### Adicionado
+- `hex_ip.sh`: descobre o IPv4 público (placa de rede, ou internet se houver NAT), com cache de 24 h, IP manual (`set`/`unset`) e detecção de NAT; só IPv4
+- Menu principal: linha "IP DA VPS" e opção 9 (ver, redescobrir, definir manualmente)
+- Resumo da instalação avisa quando a VPS está atrás de NAT e lista as portas que precisam ser liberadas também no firewall do provedor
+- O OTA também atualiza o `hex_ip.sh`
+
+## [1.1.2] - 2026-10-07
+
+### Adicionado
+- `hex_panel_mode.sh`: muda o modo de acesso do painel sem editar arquivos (HTTPS, HTTP, somente local, externo, status). Gera o certificado sozinho, reinicia, confere se o painel responde e desfaz a mudança se não responder
+- HTTPS nativo no painel (servidor cheroot, TLS 1.2+); cookie de sessão fica `Secure` no modo HTTPS; sem HSTS (certificado autoassinado)
+- Menu: Painel Web → 8) Segurança do acesso (HTTPS)
+- Instalação nova do painel já sai com HTTPS ligado (`HEX_INSTALL_HTTPS=0` para pular); instalações existentes continuam como estão até você mudar pelo menu
+- O menu e a URL mostrada nos instaladores respeitam http/https; o OTA também atualiza o `hex_panel_mode.sh`
+
 ## [1.1.1] - 2026-10-07
 
 ### Segurança

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ═══════════════════════════════════════════════════════════════
-#  HEX WEB PANEL - backend (v1.1.1)
+#  HEX WEB PANEL - backend (v1.1.3)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #
 #  Mudanças de segurança em relação à v1.0.1:
@@ -15,9 +15,11 @@
 #   - system_stats (CPU/RAM/disco) exigido pelo dashboard.html
 #   v1.1.1: ações que alteram estado (delete_user, control_service, logout)
 #           agora são POST; token CSRF obrigatório em todo POST
+#   v1.1.2: HTTPS nativo opcional (HEX_PANEL_TLS=1 + /etc/hex/webpanel_tls/);
+#           use `hex_panel_mode.sh https` em vez de editar arquivos à mão
 # ═══════════════════════════════════════════════════════════════
 import os, re, json, time, hashlib, hmac, secrets, logging, tempfile, threading
-import subprocess, datetime, fcntl, shutil, urllib.request
+import subprocess, datetime, fcntl, shutil, urllib.request, ssl, sys
 from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort, session
@@ -35,6 +37,8 @@ LOG_FILE = os.environ.get("HEX_LOG", "/var/log/hex-webpanel.log")
 PANEL_DIR = os.environ.get("HEX_PANEL_DIR", "/opt/hex-webpanel")
 MENU_PATH = os.environ.get("HEX_MENU_PATH", "/usr/local/bin/hex_menu")
 CLEANUP_PATH = os.environ.get("HEX_CLEANUP_PATH", "/usr/local/bin/hex_cleanup.sh")
+MODE_PATH = os.environ.get("HEX_MODE_PATH", "/usr/local/bin/hex_panel_mode.sh")
+IP_PATH = os.environ.get("HEX_IP_PATH", "/usr/local/bin/hex_ip.sh")
 GITHUB_RAW = os.environ.get(
     "HEX_GITHUB_RAW",
     "https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main")
@@ -49,6 +53,9 @@ VERSION_FILE = os.path.join(HEX_DIR, "version")
 UPDATE_CACHE_FILE = os.path.join(HEX_DIR, "update_cache.json")
 REQUIRE_CHECKSUM_FILE = os.path.join(HEX_DIR, "require_checksum")
 USER_SHELL_FILE = os.path.join(HEX_DIR, "user_shell")
+TLS_CERT = os.path.join(HEX_DIR, "webpanel_tls", "cert.pem")
+TLS_KEY = os.path.join(HEX_DIR, "webpanel_tls", "key.pem")
+TLS_ENABLED = os.environ.get("HEX_PANEL_TLS") == "1"
 USER_GROUP = "hexusers"
 
 SYSTEMCTL = '/usr/bin/systemctl'
@@ -190,7 +197,7 @@ app.config.update(
     SESSION_COOKIE_NAME="hex_session",
     SESSION_COOKIE_HTTPONLY=True,
     SESSION_COOKIE_SAMESITE="Strict",
-    SESSION_COOKIE_SECURE=os.environ.get("HEX_PANEL_HTTPS") == "1",
+    SESSION_COOKIE_SECURE=TLS_ENABLED or os.environ.get("HEX_PANEL_HTTPS") == "1",
     MAX_CONTENT_LENGTH=64 * 1024,
 )
 login_manager = LoginManager()
@@ -579,6 +586,18 @@ def perform_update():
                     install_file(CLEANUP_PATH, c, 0o755, stamp)
                 except Exception as e:
                     logging.warning(f"hex_cleanup.sh não atualizado: {e}")
+            try:
+                ipd = fetch_verified("hex_ip.sh", manifest)
+                check_syntax("sh", ipd, "hex_ip.sh")
+                install_file(IP_PATH, ipd, 0o755, stamp)
+            except Exception as e:
+                logging.warning(f"hex_ip.sh não atualizado: {e}")
+            try:
+                pm = fetch_verified("hex_panel_mode.sh", manifest)
+                check_syntax("sh", pm, "hex_panel_mode.sh")
+                install_file(MODE_PATH, pm, 0o755, stamp)
+            except Exception as e:
+                logging.warning(f"hex_panel_mode.sh não atualizado: {e}")
             results["menu"] = {"success": True, "message": "Menu atualizado"}
         else:
             results["menu"] = {"success": True, "message": "Menu não instalado, ignorado"}
@@ -956,13 +975,39 @@ def control_service(svc, action):
 
 
 # ───────────────────────── main ─────────────────────────
+def run_https(host, port):
+    """HTTPS nativo (cheroot). Só inicia se o certificado existir: nunca cai para HTTP em silêncio."""
+    if not (os.path.isfile(TLS_CERT) and os.path.isfile(TLS_KEY)):
+        logging.error(f"HEX_PANEL_TLS=1 mas faltam {TLS_CERT} / {TLS_KEY}. Rode: hex_panel_mode.sh https")
+        sys.exit(1)
+    try:
+        from cheroot.wsgi import Server
+        from cheroot.ssl.builtin import BuiltinSSLAdapter
+    except ImportError:
+        logging.error("cheroot não instalado. Rode: hex_panel_mode.sh https")
+        sys.exit(1)
+    server = Server((host, port), app, numthreads=8)
+    server.ssl_adapter = BuiltinSSLAdapter(TLS_CERT, TLS_KEY)
+    server.ssl_adapter.context.minimum_version = ssl.TLSVersion.TLSv1_2
+    logging.info(f"Painel (HTTPS/cheroot) em {host}:{port}")
+    try:
+        server.start()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        server.stop()
+
+
 if __name__ == '__main__':
     host = os.environ.get("HEX_PANEL_HOST", "0.0.0.0")
     port = get_webpanel_port()
-    try:
-        from waitress import serve
-        logging.info(f"Painel (waitress) em {host}:{port}")
-        serve(app, host=host, port=port, threads=4)
-    except ImportError:
-        logging.warning("waitress não instalado; usando o servidor de desenvolvimento do Flask")
-        app.run(host=host, port=port, debug=False)
+    if TLS_ENABLED:
+        run_https(host, port)
+    else:
+        try:
+            from waitress import serve
+            logging.info(f"Painel (waitress) em {host}:{port}")
+            serve(app, host=host, port=port, threads=4)
+        except ImportError:
+            logging.warning("waitress não instalado; usando o servidor de desenvolvimento do Flask")
+            app.run(host=host, port=port, debug=False)

@@ -9,7 +9,7 @@ CHANGELOG="${2:-Atualização}"
 python3 - "$VERSION" "$CHANGELOG" <<'PY'
 import datetime, glob, hashlib, json, os, sys
 version, changelog = sys.argv[1], sys.argv[2].replace('"', "'")
-files = ["app.py", "hex_menu.sh", "hex_cleanup.sh", "install.sh", "install_webpanel.sh",
+files = ["app.py", "hex_menu.sh", "hex_cleanup.sh", "hex_panel_mode.sh", "hex_ip.sh", "install.sh", "install_webpanel.sh",
          "templates/login.html", "templates/dashboard.html"]
 files += sorted(glob.glob("bhttp-server-*")) + sorted(glob.glob("hcr-server-*"))
 sha = {}

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.4] - 2026-10-08
+
+### Corrigido
+- Instalar o `ufw` fazia o `apt` **remover** `iptables-persistent` e `netfilter-persistent` (imagens Ubuntu da Oracle Cloud), perdendo a persistência do firewall. O `ufw` não é mais instalado; só é usado se já estiver ativo
+- Regras de firewall abertas pelo instalador, pelo instalador do painel e pelo menu agora são gravadas com `netfilter-persistent save` quando ele existe (sobrevivem ao reboot)
+- "Falha ao instalar dependências" não dizia o motivo. Agora o erro do `apt` aparece na tela
+
+### Melhorado
+- Passo de dependências: espera o bloqueio do `apt`/`dpkg` (até 10 min), tenta `apt-get update` 3 vezes, repara `dpkg` interrompido, usa `--no-remove`, separa pacotes essenciais, opcionais e de compilação
+- Sem ferramentas de compilação, só o UDPGW é ignorado (BHTTP e HCR continuam); antes a instalação inteira abortava
+- Verifica a existência do `systemctl` antes de começar
+
 ## [1.1.3] - 2026-10-07
 
 ### Corrigido

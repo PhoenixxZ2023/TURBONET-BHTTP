@@ -439,6 +439,8 @@ ip_publico() {
     ip=$(/usr/local/bin/hex_ip.sh 2>/dev/null)
     echo "${ip:-$(hostname -I | awk '{print $1}')}"
 }
+# grava as regras do iptables quando existe netfilter-persistent (imagens Oracle); sem ele não faz nada
+fw_persistir() { command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >/dev/null 2>&1; return 0; }
 painel_url() {
     local u
     u=$(/usr/local/bin/hex_panel_mode.sh url 2>/dev/null)
@@ -580,6 +582,7 @@ mudar_porta_webpanel() {
         ufw delete allow $old_port/tcp >/dev/null 2>&1
         ufw allow $new_port/tcp >/dev/null 2>&1
     }
+    fw_persistir
     
     ui_info "Reiniciando Painel Web..."
     systemctl start hex-webpanel.service
@@ -722,6 +725,7 @@ generico_adicionar_porta() {
         iptables -C INPUT -p "$proto" --dport "$new_port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p "$proto" --dport "$new_port" -j ACCEPT 2>/dev/null
         [ "$proto" == "udp" ] && { iptables -C INPUT -p tcp --dport "$new_port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "$new_port" -j ACCEPT 2>/dev/null; }
         command -v ufw >/dev/null 2>&1 && { ufw allow "$new_port/$proto" >/dev/null 2>&1; [ "$proto" == "udp" ] && ufw allow "$new_port/tcp" >/dev/null 2>&1; }
+        fw_persistir
     fi
     
     systemctl enable "${svc}@${new_port}.service" >/dev/null 2>&1
@@ -754,6 +758,7 @@ generico_remover_porta() {
     iptables -D INPUT -p $proto --dport $del_port -j ACCEPT 2>/dev/null
     [ "$proto" == "udp" ] && iptables -D INPUT -p tcp --dport $del_port -j ACCEPT 2>/dev/null
     command -v ufw >/dev/null 2>&1 && { ufw delete allow $del_port/$proto >/dev/null 2>&1; [ "$proto" == "udp" ] && ufw delete allow $del_port/tcp >/dev/null 2>&1; }
+    fw_persistir
     
     echo -e "  ${GREEN}✓ Porta $del_port removida completamente${NC}"; pause_return
 }

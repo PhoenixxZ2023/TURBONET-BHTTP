@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.1.3-00c853?style=for-the-badge&logo=github)
+![Version](https://img.shields.io/badge/version-1.1.4-00c853?style=for-the-badge&logo=github)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 ![Bash](https://img.shields.io/badge/Bash-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)
@@ -98,3 +98,4 @@ curl -sSL https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/in
 - **Integridade:** os instaladores e o OTA conferem o SHA256 de `version.json`. Para exigir isso sempre: `touch /etc/hex/require_checksum`.
 - **Publicando uma versão:** na raiz do repo rode `./gen_version.sh 1.1.1 "resumo"` antes do commit; ele recalcula os SHA256 de todos os arquivos (inclusive binários).
 - **IP da VPS (nuvem com NAT):** em Oracle, AWS, GCP e similares a placa de rede só tem IP *privado*; o IP público fica no roteador do provedor. O `hex_ip.sh` descobre o IPv4 público (na placa ou, se a VPS está atrás de NAT, consultando a internet; cache de 24 h) e é usado nas URLs, no resumo da instalação e na mensagem de usuário criado. Menu principal → **9) IP da VPS** para ver, redescobrir ou fixar o IP manualmente (`hex_ip.sh status | refresh | set <ipv4> | unset`). Para nunca consultar a internet: `HEX_NO_IP_LOOKUP=1`. **Atrás de NAT, libere também as portas no firewall do provedor** (Security List / Security Group); o instalador lista quais.
+- **Instalação de pacotes (v1.1.4):** o instalador espera o `apt` quando ele está ocupado, repete em caso de falha, mostra o erro real do `apt` na tela e **nunca remove pacotes**. Ele **não instala mais o `ufw`** (o `ufw` remove o `netfilter-persistent`, que as imagens Ubuntu da Oracle usam para guardar o firewall). Se o `netfilter-persistent` existir, as regras abertas são gravadas com `netfilter-persistent save`; o `ufw` só é usado se já estiver ativo.

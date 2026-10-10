@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-#  MANAGER - INSTALADOR AUTOMÁTICO (Múltiplas Portas) v1.1.2
+#  MANAGER - INSTALADOR AUTOMÁTICO (Múltiplas Portas) v1.1.4
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #
 #  Mudanças em relação à v1.0.1:
@@ -11,6 +11,8 @@
 #   - serviços com hardening básico do systemd
 #   - firewall idempotente; não sobrescreve *_ports.conf existentes
 #   - grava /etc/hex/version; resumo mostra o estado real dos serviços
+#   - instalação de pacotes robusta: espera o apt, repete, mostra o erro real, nunca
+#     remove pacotes. NÃO instala mais o ufw (ele remove o netfilter-persistent da Oracle)
 # ═══════════════════════════════════════════════════════════════
 set -o pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -88,12 +90,60 @@ detectar_arquitetura() {
     esac
 }
 
+# ── apt robusto: espera o bloqueio, tenta de novo, NUNCA remove pacotes e mostra o erro real ──
+APT_OPTS=(-y --no-remove -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confold)
+
+apt_atualizar() {
+    local t
+    for t in 1 2 3; do
+        apt-get update -o DPkg::Lock::Timeout=600 >>"$LOG_FILE" 2>&1 && return 0
+        ui_info "apt-get update falhou (tentativa $t/3); aguardando..."; sleep 5
+    done
+    ui_warn "Não foi possível atualizar a lista de pacotes; seguindo com a lista atual"
+    return 1
+}
+
+# apt_instalar <rótulo> <pacotes...>: 0 = ok; 1 = falhou (e mostra as linhas de erro do apt)
+apt_instalar() {
+    local rotulo="$1" tmp; shift
+    tmp=$(mktemp) || return 1
+    if apt-get install "${APT_OPTS[@]}" "$@" >"$tmp" 2>&1; then
+        cat "$tmp" >>"$LOG_FILE"; rm -f "$tmp"; return 0
+    fi
+    cat "$tmp" >>"$LOG_FILE"
+    if grep -qE "dpkg was interrupted|dpkg --configure -a" "$tmp"; then
+        ui_info "dpkg estava interrompido; reparando e tentando de novo..."
+        dpkg --configure -a >>"$LOG_FILE" 2>&1
+        apt-get -f install "${APT_OPTS[@]}" >>"$LOG_FILE" 2>&1
+        if apt-get install "${APT_OPTS[@]}" "$@" >"$tmp" 2>&1; then
+            cat "$tmp" >>"$LOG_FILE"; rm -f "$tmp"; return 0
+        fi
+        cat "$tmp" >>"$LOG_FILE"
+    fi
+    ui_error "Falha ao instalar: $rotulo. Erro do apt:"
+    { grep -E "^(E:|W:)|rror|lock|held|broken|Unable|Could not" "$tmp" | tail -8; } | sed 's/^/        /'
+    rm -f "$tmp"
+    return 1
+}
+
+# apt_opcional <pacotes...>: tenta em grupo e depois um a um; nunca aborta. Devolve 1 se algum faltou.
+apt_opcional() {
+    local p miss=0
+    apt_instalar "opcionais" "$@" >/dev/null 2>&1 && return 0
+    for p in "$@"; do apt_instalar "$p" "$p" >/dev/null 2>&1 || { miss=1; ui_warn "Pacote opcional indisponível: $p"; }; done
+    return $miss
+}
+
+# firewall: ufw só se já estiver ATIVO; regras do iptables persistem se houver netfilter-persistent (imagens Oracle)
+firewall_ufw_ativo() { command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "^Status: active"; }
+fw_persistir() { command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >>"$LOG_FILE" 2>&1; return 0; }
+
 # abrir_porta <proto> <porta>  (idempotente)
 abrir_porta() {
     local proto="$1" port="$2"
     iptables -C INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null \
         || iptables -I INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null
-    command -v ufw >/dev/null 2>&1 && ufw allow "$port/$proto" >/dev/null 2>&1
+    firewall_ufw_ativo && ufw allow "$port/$proto" >/dev/null 2>&1
     return 0
 }
 
@@ -114,11 +164,21 @@ limpar_instalacao_previa() {
 
 instalar_dependencias() {
     clear; ui_top; ui_titulo "1/6 INSTALANDO DEPENDÊNCIAS"; ui_sep
-    ui_info "Atualizando repositórios e instalando pacotes..."
-    apt-get update -y >>"$LOG_FILE" 2>&1
-    apt-get install -y curl wget systemd iptables ufw lsof git cmake build-essential libssl-dev \
-        python3 python3-pip python3-venv >>"$LOG_FILE" 2>&1 \
-        || { ui_error "Falha ao instalar dependências (veja $LOG_FILE)"; exit 1; }
+    ui_info "Atualizando a lista de pacotes (aguarda se o apt estiver ocupado)..."
+    apt_atualizar
+    ui_info "Instalando pacotes essenciais..."
+    apt_instalar "essenciais (curl, ca-certificates, iptables, python3, python3-venv)" \
+        curl ca-certificates iptables python3 python3-venv \
+        || { ui_error "Não foi possível instalar os pacotes essenciais. Log completo: $LOG_FILE"; exit 1; }
+    ui_info "Instalando pacotes opcionais..."
+    apt_opcional python3-pip wget lsof
+    ui_info "Instalando ferramentas de compilação do UDPGW..."
+    if apt_instalar "compilação (git, cmake, build-essential, libssl-dev)" git cmake build-essential libssl-dev; then
+        SKIP_UDPGW_BUILD=0
+    else
+        SKIP_UDPGW_BUILD=1
+        ui_warn "Sem ferramentas de compilação: o UDPGW será ignorado (BHTTP e HCR seguem normais)"
+    fi
     ui_ok "Dependências instaladas"; sleep 1
 }
 
@@ -144,6 +204,9 @@ baixar_binarios() {
 compilar_udpgw() {
     clear; ui_top; ui_titulo "3/6 COMPILANDO UDPGW (BadVPN $BADVPN_TAG)"; ui_sep
     local build="$TMPD/badvpn"
+    if [ "${SKIP_UDPGW_BUILD:-0}" = "1" ]; then
+        ui_warn "Compilação do UDPGW ignorada (faltam ferramentas de compilação)"; sleep 1; return 0
+    fi
     ui_info "Baixando código-fonte do BadVPN (tag fixa)..."
     if git clone --quiet --depth 1 --branch "$BADVPN_TAG" https://github.com/ambrop72/badvpn.git "$build" >>"$LOG_FILE" 2>&1; then
         mkdir -p "$build/build"
@@ -243,6 +306,7 @@ iniciar_servicos_e_firewall() {
             if [ -f "$UDPGW_PUBLIC_FLAG" ]; then abrir_porta udp "$port"; abrir_porta tcp "$port"; fi
         done < "$HEX_DIR/udpgw_ports.conf"
     fi
+    fw_persistir
     ui_ok "Serviços iniciados (estado real no resumo final)"; sleep 1
 }
 
@@ -322,6 +386,7 @@ mostrar_resumo() {
 
 main() {
     if [ "$EUID" -ne 0 ]; then echo -e "${RED}✗ Requer root${NC}"; exit 1; fi
+    command -v systemctl >/dev/null 2>&1 || { echo -e "${RED}✗ systemd (systemctl) não encontrado${NC}"; exit 1; }
     : > "$LOG_FILE" 2>/dev/null
     TMPD=$(mktemp -d); trap 'rm -rf "$TMPD"' EXIT
     limpar_instalacao_previa

@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-#  PAINEL WEB - INSTALADOR (v1.1.2)
+#  PAINEL WEB - INSTALADOR (v1.1.4)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #
 #  - baixa app.py e templates do repositório (com SHA256 do version.json)
@@ -77,17 +77,66 @@ baixar_verificado() {
     chmod "$mode" "$tmpf" && mv -f "$tmpf" "$dest"
 }
 
+# ── apt robusto: espera o bloqueio, tenta de novo, NUNCA remove pacotes e mostra o erro real ──
+APT_OPTS=(-y --no-remove -o DPkg::Lock::Timeout=600 -o Dpkg::Options::=--force-confold)
+
+apt_atualizar() {
+    local t
+    for t in 1 2 3; do
+        apt-get update -o DPkg::Lock::Timeout=600 >>"$LOG_FILE" 2>&1 && return 0
+        ui_info "apt-get update falhou (tentativa $t/3); aguardando..."; sleep 5
+    done
+    ui_warn "Não foi possível atualizar a lista de pacotes; seguindo com a lista atual"
+    return 1
+}
+
+# apt_instalar <rótulo> <pacotes...>: 0 = ok; 1 = falhou (e mostra as linhas de erro do apt)
+apt_instalar() {
+    local rotulo="$1" tmp; shift
+    tmp=$(mktemp) || return 1
+    if apt-get install "${APT_OPTS[@]}" "$@" >"$tmp" 2>&1; then
+        cat "$tmp" >>"$LOG_FILE"; rm -f "$tmp"; return 0
+    fi
+    cat "$tmp" >>"$LOG_FILE"
+    if grep -qE "dpkg was interrupted|dpkg --configure -a" "$tmp"; then
+        ui_info "dpkg estava interrompido; reparando e tentando de novo..."
+        dpkg --configure -a >>"$LOG_FILE" 2>&1
+        apt-get -f install "${APT_OPTS[@]}" >>"$LOG_FILE" 2>&1
+        if apt-get install "${APT_OPTS[@]}" "$@" >"$tmp" 2>&1; then
+            cat "$tmp" >>"$LOG_FILE"; rm -f "$tmp"; return 0
+        fi
+        cat "$tmp" >>"$LOG_FILE"
+    fi
+    ui_error "Falha ao instalar: $rotulo. Erro do apt:"
+    { grep -E "^(E:|W:)|rror|lock|held|broken|Unable|Could not" "$tmp" | tail -8; } | sed 's/^/        /'
+    rm -f "$tmp"
+    return 1
+}
+
+# apt_opcional <pacotes...>: tenta em grupo e depois um a um; nunca aborta. Devolve 1 se algum faltou.
+apt_opcional() {
+    local p miss=0
+    apt_instalar "opcionais" "$@" >/dev/null 2>&1 && return 0
+    for p in "$@"; do apt_instalar "$p" "$p" >/dev/null 2>&1 || { miss=1; ui_warn "Pacote opcional indisponível: $p"; }; done
+    return $miss
+}
+
+# firewall: ufw só se já estiver ATIVO; regras do iptables persistem se houver netfilter-persistent (imagens Oracle)
+firewall_ufw_ativo() { command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "^Status: active"; }
+fw_persistir() { command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >>"$LOG_FILE" 2>&1; return 0; }
+
 verificar_root() {
     [ "$EUID" -eq 0 ] || { echo -e "${RED}✗ Este script requer permissões de root${NC}"; exit 1; }
 }
 
 instalar_dependencias() {
     clear; ui_top; ui_titulo "1/5 INSTALANDO DEPENDÊNCIAS"; ui_sep
-    ui_info "Atualizando repositórios..."
-    apt-get update -y >>"$LOG_FILE" 2>&1
-    ui_info "Instalando Python3, venv e curl..."
-    apt-get install -y python3 python3-pip python3-venv curl >>"$LOG_FILE" 2>&1 \
-        || { ui_error "Falha ao instalar dependências (veja $LOG_FILE)"; exit 1; }
+    ui_info "Atualizando a lista de pacotes (aguarda se o apt estiver ocupado)..."
+    apt_atualizar
+    ui_info "Instalando Python3, venv, curl e openssl..."
+    apt_instalar "python3, python3-venv, curl, ca-certificates, openssl" python3 python3-venv curl ca-certificates openssl \
+        || { ui_error "Falha ao instalar dependências. Log completo: $LOG_FILE"; exit 1; }
+    apt_opcional python3-pip
     ui_ok "Dependências instaladas"; sleep 1
 }
 
@@ -159,7 +208,8 @@ EOT
     ui_info "Abrindo a porta $PANEL_PORT/tcp no firewall..."
     iptables -C INPUT -p tcp --dport "$PANEL_PORT" -j ACCEPT 2>/dev/null \
         || iptables -I INPUT -p tcp --dport "$PANEL_PORT" -j ACCEPT 2>/dev/null
-    command -v ufw >/dev/null 2>&1 && ufw allow "$PANEL_PORT/tcp" >/dev/null 2>&1
+    firewall_ufw_ativo && ufw allow "$PANEL_PORT/tcp" >/dev/null 2>&1
+    fw_persistir
     local fresh=0
     [ -s "$HEX_DIR/webpanel_admin_pass.conf" ] || fresh=1
     ui_info "Iniciando painel web..."

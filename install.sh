@@ -1,6 +1,6 @@
 #!/bin/bash
 # ═══════════════════════════════════════════════════════════════
-#  MANAGER - INSTALADOR AUTOMÁTICO (Múltiplas Portas) v1.1.4
+#  MANAGER - INSTALADOR AUTOMÁTICO (Múltiplas Portas) v1.1.7
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #
 #  Mudanças em relação à v1.0.1:
@@ -13,6 +13,8 @@
 #   - grava /etc/hex/version; resumo mostra o estado real dos serviços
 #   - instalação de pacotes robusta: espera o apt, repete, mostra o erro real, nunca
 #     remove pacotes. NÃO instala mais o ufw (ele remove o netfilter-persistent da Oracle)
+#   - BHTTP, HCR e UDPGW ficam INSTALADOS e DESATIVADOS: nenhuma porta é aberta nem iniciada.
+#     O usuário ativa pelo menu (Gerenciar X > Ativar). Reinstalar religa só o que já estava ativo
 # ═══════════════════════════════════════════════════════════════
 set -o pipefail
 export DEBIAN_FRONTEND=noninteractive
@@ -153,6 +155,10 @@ limpar_instalacao_previa() {
     local svc instance
     for svc in bhttp hcr udpgw; do
         for instance in $(systemctl list-units --full --all "${svc}@*.service" 2>/dev/null | grep -oP "${svc}@\K[0-9]+"); do
+            if systemctl is-active --quiet "${svc}@${instance}.service" 2>/dev/null \
+               || systemctl is-enabled --quiet "${svc}@${instance}.service" 2>/dev/null; then
+                echo "${svc}@${instance}" >> "$ATIVOS_ANTES"
+            fi
             systemctl stop "${svc}@${instance}.service" 2>/dev/null || true
         done
     done
@@ -257,10 +263,10 @@ EOT
 
 configurar_servicos() {
     clear; ui_top; ui_titulo "4/6 CONFIGURANDO SERVIÇOS"; ui_sep
-    # portas padrão: só cria se ainda não existir (não sobrescreve configuração do usuário)
-    [ -f "$HEX_DIR/bhttp_ports.conf" ] || printf '80\n8880\n' > "$HEX_DIR/bhttp_ports.conf"
-    [ -f "$HEX_DIR/hcr_ports.conf" ] || printf '8080\n' > "$HEX_DIR/hcr_ports.conf"
-    [ -f "$HEX_DIR/udpgw_ports.conf" ] || printf '7100\n7200\n7300\n' > "$HEX_DIR/udpgw_ports.conf"
+    # listas de portas: criadas VAZIAS (nada é ativado); o usuário escolhe as portas ao ativar pelo menu
+    [ -f "$HEX_DIR/bhttp_ports.conf" ] || : > "$HEX_DIR/bhttp_ports.conf"
+    [ -f "$HEX_DIR/hcr_ports.conf" ] || : > "$HEX_DIR/hcr_ports.conf"
+    [ -f "$HEX_DIR/udpgw_ports.conf" ] || : > "$HEX_DIR/udpgw_ports.conf"
     touch "$USER_DB" && chmod 600 "$USER_DB"
 
     # UDPGW público só se pedido (ou se já estava assim numa instalação anterior)
@@ -281,33 +287,28 @@ configurar_servicos() {
 }
 
 iniciar_servicos_e_firewall() {
-    clear; ui_top; ui_titulo "5/6 FIREWALL E INICIALIZAÇÃO"; ui_sep
-    local port
-    ui_info "Iniciando portas BHTTP..."
-    while read -r port; do
-        [ -z "$port" ] && continue
-        systemctl enable "bhttp@${port}.service" >/dev/null 2>&1
-        systemctl restart "bhttp@${port}.service" 2>>"$LOG_FILE"
-        abrir_porta tcp "$port"
-    done < "$HEX_DIR/bhttp_ports.conf"
-    ui_info "Iniciando portas HCR..."
-    while read -r port; do
-        [ -z "$port" ] && continue
-        systemctl enable "hcr@${port}.service" >/dev/null 2>&1
-        systemctl restart "hcr@${port}.service" 2>>"$LOG_FILE"
-        abrir_porta tcp "$port"
-    done < "$HEX_DIR/hcr_ports.conf"
-    if [ -x "$UDPGW_BIN" ]; then
-        ui_info "Iniciando portas UDPGW..."
-        while read -r port; do
-            [ -z "$port" ] && continue
-            systemctl enable "udpgw@${port}.service" >/dev/null 2>&1
-            systemctl restart "udpgw@${port}.service" 2>>"$LOG_FILE"
-            if [ -f "$UDPGW_PUBLIC_FLAG" ]; then abrir_porta udp "$port"; abrir_porta tcp "$port"; fi
-        done < "$HEX_DIR/udpgw_ports.conf"
+    clear; ui_top; ui_titulo "5/6 SERVIÇOS (instalados, ativação manual)"; ui_sep
+    local inst svc port religados=0
+    if [ -s "$ATIVOS_ANTES" ]; then
+        ui_info "Reinstalação: religando só o que já estava ativo antes..."
+        while read -r inst; do
+            svc=${inst%@*}; port=${inst#*@}
+            grep -qx "$port" "$HEX_DIR/${svc}_ports.conf" 2>/dev/null || continue
+            systemctl enable "${inst}.service" >/dev/null 2>&1
+            systemctl restart "${inst}.service" 2>>"$LOG_FILE"
+            case "$svc" in
+                udpgw) if [ -f "$UDPGW_PUBLIC_FLAG" ]; then abrir_porta udp "$port"; abrir_porta tcp "$port"; fi ;;
+                *) abrir_porta tcp "$port" ;;
+            esac
+            religados=$((religados+1))
+        done < "$ATIVOS_ANTES"
+        fw_persistir
+        ui_ok "$religados porta(s) religada(s)"
+    else
+        ui_ok "BHTTP, HCR e UDPGW instalados e DESATIVADOS (nenhuma porta aberta ou iniciada)"
+        ui_info "Você ativa e escolhe as portas pelo menu: hex_menu → Gerenciar → Ativar"
     fi
-    fw_persistir
-    ui_ok "Serviços iniciados (estado real no resumo final)"; sleep 1
+    sleep 1
 }
 
 instalar_menu_e_limpeza() {
@@ -341,16 +342,28 @@ criar_comandos_rapidos() {
     ln -sf /usr/local/bin/hex_menu /usr/local/bin/hcr 2>/dev/null
 }
 
+total_ativos() {   # quantas portas dos 3 serviços estão ativas agora
+    local svc port n=0
+    for svc in bhttp hcr udpgw; do
+        [ -f "$HEX_DIR/${svc}_ports.conf" ] || continue
+        while read -r port; do
+            [ -z "$port" ] && continue
+            systemctl is-active --quiet "${svc}@${port}.service" 2>/dev/null && n=$((n+1))
+        done < "$HEX_DIR/${svc}_ports.conf"
+    done
+    echo "$n"
+}
+
 estado_servico() {   # estado_servico <svc> <conf>  → "ATIVO (2/2)" etc.
     local svc="$1" conf="$2" total=0 active=0 port
     while read -r port; do
         [ -z "$port" ] && continue; total=$((total+1))
         systemctl is-active --quiet "${svc}@${port}.service" && active=$((active+1))
     done < "$conf" 2>/dev/null
-    if [ "$total" -eq 0 ]; then echo -e "${RED}● SEM PORTAS${NC}"
+    if [ "$total" -eq 0 ]; then echo -e "${YELLOW}○ DESATIVADO${NC} (instalado)"
     elif [ "$active" -eq "$total" ]; then echo -e "${GREEN}● ATIVO${NC} ($active/$total)"
     elif [ "$active" -gt 0 ]; then echo -e "${YELLOW}● PARCIAL${NC} ($active/$total)"
-    else echo -e "${RED}● INATIVO${NC} (0/$total)"; fi
+    else echo -e "${YELLOW}○ DESATIVADO${NC} (0/$total)"; fi
 }
 
 portas_para_liberar() {
@@ -374,12 +387,25 @@ mostrar_resumo() {
     ui_fila ""; ui_sep
     ui_fila " ${BOLD}Comando:${NC} ${YELLOW}hex_menu | bhttp | hcr${NC}"
     ui_fila " ${BOLD}IP:${NC} ${YELLOW}$(/usr/local/bin/hex_ip.sh 2>/dev/null || hostname -I | awk '{print $1}')${NC}"
-    if /usr/local/bin/hex_ip.sh nat 2>/dev/null; then
-        ui_fila ""
-        ui_fila " ${YELLOW}⚠ Sua VPS está atrás de NAT (a placa de rede só tem IP privado).${NC}"
-        ui_fila "   Libere também no firewall do PROVEDOR (Security List / Security Group):"
-        ui_fila "   ${BOLD}$(portas_para_liberar)${NC}"
+    ui_fila ""
+    if [ "$(total_ativos)" -eq 0 ]; then
+        ui_fila " ${YELLOW}${BOLD}⚠ BHTTP, HCR e UDPGW estão instalados, mas DESATIVADOS.${NC}"
+        ui_fila "   Nenhuma porta foi aberta. Para ativar e escolher a porta:"
+        ui_fila "   ${BOLD}hex_menu → [1] Gerenciar BHTTP → [7] Ativar BHTTP${NC}  (igual para [2] HCR e [3] UDPGW)"
+        ui_fila "   Portas sugeridas: BHTTP ${BOLD}80${NC} ou ${BOLD}8880${NC} · HCR ${BOLD}8080${NC} · UDPGW ${BOLD}7300${NC} (só local)"
+        if /usr/local/bin/hex_ip.sh nat 2>/dev/null; then
+            ui_fila "   ${YELLOW}Atrás de NAT:${NC} ao ativar, libere a porta também no firewall do PROVEDOR"
+            ui_fila "   (Security List / Security Group). Painel Web: ${BOLD}$(cat "$HEX_DIR/webpanel_port.conf" 2>/dev/null || echo 9000)${NC}"
+        fi
+    else
+        ui_fila " ${GRIS}Serviços religados como estavam antes. Ative/desative os demais em:${NC}"
+        ui_fila "   ${BOLD}hex_menu → [1] BHTTP · [2] HCR · [3] UDPGW → [7] Ativar/Desativar${NC}"
+        if /usr/local/bin/hex_ip.sh nat 2>/dev/null; then
+            ui_fila "   ${YELLOW}Atrás de NAT:${NC} portas em uso para liberar no firewall do PROVEDOR:"
+            ui_fila "   ${BOLD}$(portas_para_liberar)${NC}"
+        fi
     fi
+    ui_fila ""
     ui_fila " ${BOLD}Repo:${NC} ${CYAN}github.com/PhoenixxZ2023/TURBONET-BHTTP${NC}"
     ui_fila ""; ui_bot; echo ""
 }
@@ -389,6 +415,7 @@ main() {
     command -v systemctl >/dev/null 2>&1 || { echo -e "${RED}✗ systemd (systemctl) não encontrado${NC}"; exit 1; }
     : > "$LOG_FILE" 2>/dev/null
     TMPD=$(mktemp -d); trap 'rm -rf "$TMPD"' EXIT
+    ATIVOS_ANTES="$TMPD/ativos_antes"; : > "$ATIVOS_ANTES"
     limpar_instalacao_previa
     instalar_dependencias
     baixar_binarios

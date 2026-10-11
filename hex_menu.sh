@@ -158,10 +158,11 @@ get_svc_status() {
             systemctl is-active --quiet "${svc}@${port}.service" 2>/dev/null && ((active++))
         done < "$conf"
     fi
-    if [ "$total" -eq 0 ]; then echo "${RED}● SEM PORTAS${NC} (0)"
+    if [ "$total" -eq 0 ]; then echo "${YELLOW}○ DESATIVADO${NC} (instalado)"
     elif [ "$active" -eq "$total" ]; then echo "${GREEN}● ATIVO${NC} ($active/$total)"
     elif [ "$active" -gt 0 ]; then echo "${YELLOW}● PARCIAL${NC} ($active/$total)"
-    else echo "${RED}● INATIVO${NC} (0/$total)"; fi
+    elif svc_habilitado "$svc" "$conf"; then echo "${RED}● INATIVO${NC} (0/$total)"
+    else echo "${YELLOW}○ DESATIVADO${NC} (0/$total)"; fi
 }
 
 # ═══════════════════════════════════════════════════════════════
@@ -527,6 +528,61 @@ menu_seguranca_painel() {
     done
 }
 
+# ── senha do painel: ver a inicial / redefinir ──
+PAINEL_PY="${PAINEL_PY:-/opt/hex-webpanel/venv/bin/python}"
+PAINEL_APP="${PAINEL_APP:-/opt/hex-webpanel/app.py}"
+PAINEL_PASS_INICIAL="${PAINEL_PASS_INICIAL:-/etc/hex/webpanel_initial_password.txt}"
+painel_aplicar_senha() {  # reinicia o painel para valer a nova senha (e zerar bloqueios de login)
+    systemctl restart hex-webpanel.service 2>/dev/null
+    echo -e "  ${GREEN}✓ Painel reiniciado. Sessões antigas foram desconectadas.${NC}"
+}
+menu_senha_painel() {
+    local opt out p1 p2
+    while true; do
+        clear; ui_top; ui_titulo "SENHA DO PAINEL WEB"; ui_sep; ui_fila ""
+        if [ -f "$PAINEL_PASS_INICIAL" ]; then
+            ui_fila "  A senha inicial ainda não foi trocada: dá para ver."
+        else
+            ui_fila "  A senha já foi trocada. Ela é guardada só em forma de hash,"
+            ui_fila "  então não dá para ver; se esqueceu, gere ou defina uma nova."
+        fi
+        ui_fila ""; ui_sep; ui_fila ""
+        ui_opcion "1" "Ver a senha inicial"
+        ui_opcion "2" "Gerar uma nova senha aleatória"
+        ui_opcion "3" "Definir minha própria senha"
+        ui_opcion "0" "Voltar"
+        ui_bot; echo ""; echo -ne "  ${CYAN}►${NC} Selecione a opção: "; read -r opt
+        case "$opt" in
+            1) if [ -f "$PAINEL_PASS_INICIAL" ]; then
+                   echo ""; sed -n 's/^Senha inicial do painel: /  Senha: /p' "$PAINEL_PASS_INICIAL"
+               else
+                   echo -e "  ${YELLOW}⚠ Não há senha inicial salva (já foi trocada). Use a opção 2 ou 3.${NC}"
+               fi; pause_return ;;
+            2|3)
+               if ! grep -q -- "--set-password" "$PAINEL_APP" 2>/dev/null; then
+                   echo -e "  ${YELLOW}⚠ Este painel é de uma versão antiga. Atualize em: menu principal → Buscar atualizações.${NC}"
+                   pause_return; continue
+               fi
+               if [ "$opt" = "2" ]; then
+                   out=$("$PAINEL_PY" "$PAINEL_APP" --reset-password 2>&1) || { echo -e "  ${RED}✗ Erro: $out${NC}"; pause_return; continue; }
+                   echo ""; echo -e "  ${GREEN}✓ Nova senha gerada${NC}"
+                   echo -e "  ${BOLD}Senha:${NC} ${YELLOW}${out#NOVA_SENHA=}${NC}"
+                   echo -e "  ${GRIS}Anote. Troque no dashboard depois, se quiser.${NC}"
+               else
+                   echo -ne "  ${WHITE}Nova senha (8 a 72 caracteres):${NC} "; read -rs p1; echo ""
+                   echo -ne "  ${WHITE}Repita a senha:${NC} "; read -rs p2; echo ""
+                   if [ "$p1" != "$p2" ]; then echo -e "  ${RED}✗ As senhas não coincidem${NC}"; pause_return; continue; fi
+                   out=$(printf '%s\n' "$p1" | "$PAINEL_PY" "$PAINEL_APP" --set-password 2>&1) \
+                       || { echo -e "  ${RED}✗ ${out}${NC}"; pause_return; continue; }
+                   echo -e "  ${GREEN}✓ Senha definida${NC}"
+               fi
+               painel_aplicar_senha; pause_return ;;
+            0) return ;;
+            *) echo -e "  ${RED}✗ Opção inválida${NC}"; pause_return ;;
+        esac
+    done
+}
+
 mudar_porta_webpanel() {
     clear; ui_top; ui_titulo "MUDAR PORTA DO PAINEL"; ui_sep; ui_fila ""
     
@@ -667,8 +723,123 @@ menu_principal() {
 #  GERENCIAMENTO GENÉRICO DE SERVIÇOS
 # ═══════════════════════════════════════════════════════════════
 
+# ── Ativar / Desativar serviço: instalado, mas só liga quando o usuário pedir ──
+svc_porta_padrao() { case "$1" in bhttp) echo 80 ;; hcr) echo 8080 ;; udpgw) echo 7300 ;; *) echo "" ;; esac; }
+
+# 0 se alguma porta do serviço está ativa ou habilitada no boot
+svc_habilitado() {
+    local svc=$1 conf=$2 port
+    [ -f "$conf" ] || return 1
+    while read -r port; do
+        [ -z "$port" ] && continue
+        systemctl is-enabled --quiet "${svc}@${port}.service" 2>/dev/null && return 0
+        systemctl is-active --quiet "${svc}@${port}.service" 2>/dev/null && return 0
+    done < "$conf"
+    return 1
+}
+
+fw_abrir_svc() {   # <svc> <proto> <porta>  (UDPGW só abre se estiver no modo público)
+    local svc=$1 proto=$2 port=$3
+    if [ "$svc" != "udpgw" ] || [ -f "$UDPGW_PUBLIC_FLAG" ]; then
+        iptables -C INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null
+        [ "$proto" = "udp" ] && { iptables -C INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null || iptables -I INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null; }
+        command -v ufw >/dev/null 2>&1 && { ufw allow "$port/$proto" >/dev/null 2>&1; [ "$proto" = "udp" ] && ufw allow "$port/tcp" >/dev/null 2>&1; }
+    fi
+    return 0
+}
+fw_fechar_svc() {  # <svc> <proto> <porta>
+    local proto=$2 port=$3
+    iptables -D INPUT -p "$proto" --dport "$port" -j ACCEPT 2>/dev/null
+    [ "$proto" = "udp" ] && iptables -D INPUT -p tcp --dport "$port" -j ACCEPT 2>/dev/null
+    command -v ufw >/dev/null 2>&1 && { ufw delete allow "$port/$proto" >/dev/null 2>&1; [ "$proto" = "udp" ] && ufw delete allow "$port/tcp" >/dev/null 2>&1; }
+    return 0
+}
+# nome do processo que está escutando na porta (vazio se livre)
+porta_ocupada_por() {
+    local linha
+    linha=$(ss -H -tulnp "sport = :$1" 2>/dev/null | head -1)
+    [ -z "$linha" ] && return 1
+    echo "$linha" | grep -o 'users:(("[^"]*"' | sed 's/users:(("//; s/"$//' | head -1
+    return 0
+}
+aviso_firewall_provedor() {  # <lista de portas>
+    if /usr/local/bin/hex_ip.sh nat 2>/dev/null; then
+        echo -e "  ${YELLOW}⚠ Sua VPS está atrás de NAT: libere também no firewall do PROVEDOR${NC}"
+        echo -e "  ${YELLOW}  (Security List / Security Group) a(s) porta(s): ${BOLD}$1${NC}"
+    fi
+}
+
+generico_ativar_desativar() {
+    local svc=$1 title=$2 conf=$3 proto=$4 port padrao c quem ok=0 falhou=0 lista=""
+    padrao=$(svc_porta_padrao "$svc")
+    [ -f "$conf" ] || : > "$conf"
+    clear; ui_top
+    if svc_habilitado "$svc" "$conf"; then
+        ui_titulo "DESATIVAR $title"; ui_sep; ui_fila ""
+        echo -e "  Isso ${BOLD}para e desliga${NC} todas as portas do $title (não iniciam no boot)"
+        echo -e "  e ${BOLD}fecha${NC} o firewall delas. As portas continuam na lista para ativar de novo."
+        echo -ne "\n  ${YELLOW}Desativar o $title? (s/n):${NC} "; read -r c
+        [ "$c" = "s" ] || [ "$c" = "S" ] || { echo -e "  ${GRIS}Cancelado${NC}"; pause_return; return; }
+        while read -r port; do
+            [ -z "$port" ] && continue
+            systemctl stop "${svc}@${port}.service" 2>/dev/null
+            systemctl disable "${svc}@${port}.service" >/dev/null 2>&1
+            fw_fechar_svc "$svc" "$proto" "$port"
+            echo -e "  ${GREEN}✓ Porta $port desativada${NC}"
+        done < "$conf"
+        fw_persistir
+        echo -e "\n  ${GREEN}✓ $title desativado${NC} ${GRIS}(instalado; para ligar de novo use esta mesma opção)${NC}"
+        pause_return; return
+    fi
+
+    ui_titulo "ATIVAR $title"; ui_sep; ui_fila ""
+    if ! grep -q '[0-9]' "$conf" 2>/dev/null; then
+        echo -ne "  ${WHITE}Porta para o $title${NC} ${GRIS}[$padrao]${NC}: "; read -r port
+        port=${port:-$padrao}
+        if ! [[ "$port" =~ ^[0-9]+$ ]] || [ "$port" -lt 1 ] || [ "$port" -gt 65535 ]; then
+            echo -e "  ${RED}✗ Porta inválida${NC}"; pause_return; return
+        fi
+        echo "$port" >> "$conf"
+    else
+        echo -e "  Portas configuradas: ${YELLOW}$(paste -sd' ' "$conf")${NC}"
+        echo -e "  ${GRIS}(para trocar ou incluir outra, use Adicionar/Remover porta)${NC}"
+    fi
+    echo ""
+    while read -r port; do
+        [ -z "$port" ] && continue
+        if ! systemctl is-active --quiet "${svc}@${port}.service" 2>/dev/null; then
+            if quem=$(porta_ocupada_por "$port"); then
+                echo -e "  ${RED}✗ Porta $port já está em uso${NC} ${GRIS}${quem:+(processo: $quem)}${NC} - pulada"
+                falhou=$((falhou+1)); continue
+            fi
+        fi
+        fw_abrir_svc "$svc" "$proto" "$port"
+        systemctl enable "${svc}@${port}.service" >/dev/null 2>&1
+        systemctl start "${svc}@${port}.service" 2>/dev/null
+        sleep 1
+        if systemctl is-active --quiet "${svc}@${port}.service" 2>/dev/null; then
+            echo -e "  ${GREEN}✓ Porta $port ativa${NC}"; ok=$((ok+1)); lista="${lista:+$lista, }$port"
+        else
+            echo -e "  ${YELLOW}⚠ Porta $port não iniciou (veja: journalctl -u ${svc}@${port} -n 20)${NC}"; falhou=$((falhou+1))
+        fi
+    done < "$conf"
+    fw_persistir
+    echo ""
+    if [ "$ok" -gt 0 ]; then
+        echo -e "  ${GREEN}✓ $title ativado${NC} em ${YELLOW}$lista${NC} ${GRIS}- IP: $(ip_publico)${NC}"
+        if [ "$svc" = "udpgw" ] && [ ! -f "$UDPGW_PUBLIC_FLAG" ]; then
+            echo -e "  ${GRIS}UDPGW escuta só em 127.0.0.1 (use pelo túnel SSH); não precisa abrir no provedor.${NC}"
+        else
+            aviso_firewall_provedor "$lista"
+        fi
+    else
+        echo -e "  ${RED}✗ Nenhuma porta foi ativada${NC}"
+    fi
+    pause_return
+}
+
 menu_generico() {
-    local svc=$1 title=$2 conf=$3 proto=$4
+    local svc=$1 title=$2 conf=$3 proto=$4 rotulo_toggle
     while true; do
         clear; ui_top; ui_titulo "GERENCIAMENTO $title"; ui_sep; echo ""
         echo -e "  ${CYAN}╔══════════════════════════════════════════════════════════════╗${NC}"
@@ -685,6 +856,11 @@ menu_generico() {
         fi
         [ "$count" -eq 0 ] && echo -e "  ${CYAN}║${NC}  ${YELLOW}Nenhuma porta configurada${NC}                            ${CYAN}║${NC}"
         echo -e "  ${CYAN}╚══════════════════════════════════════════════════════════════╝${NC}"; echo ""
+        if svc_habilitado "$svc" "$conf"; then
+            ui_fila "  Serviço: ${GREEN}● ATIVADO${NC}"; rotulo_toggle="Desativar $title"
+        else
+            ui_fila "  Serviço: ${YELLOW}○ DESATIVADO${NC} ${GRIS}(instalado; use a opção 7 para ativar)${NC}"; rotulo_toggle="Ativar $title"
+        fi
         ui_sep; ui_fila ""
         
         ui_opcion "1" "Adicionar porta"
@@ -693,6 +869,7 @@ menu_generico() {
         ui_opcion "4" "Parar todos"
         ui_opcion "5" "Reiniciar todos"
         ui_opcion "6" "Controle individual"
+        ui_opcion "7" "$rotulo_toggle"
         ui_opcion "0" "Voltar"
         ui_bot; echo ""; echo -ne "  ${CYAN}►${NC} Selecione a opção: "; read -r opt
         
@@ -703,6 +880,7 @@ menu_generico() {
             4) generico_acao_todos "$svc" "$conf" "stop" "parado"; pause_return ;;
             5) generico_acao_todos "$svc" "$conf" "restart" "reiniciado"; pause_return ;;
             6) generico_controle_individual "$svc" "$conf"; pause_return ;;
+            7) generico_ativar_desativar "$svc" "$title" "$conf" "$proto" ;;
             0) break ;; *) echo -e "  ${RED}✗ Opção inválida${NC}"; pause_return ;;
         esac
     done
@@ -825,6 +1003,37 @@ instalar_painel_web_automatico() {
     pause_return
 }
 
+painel_ativar_desativar() {
+    local port c quem
+    port=$(cat "$WEBPANEL_PORT_FILE" 2>/dev/null || echo 9000)
+    clear; ui_top
+    if systemctl is-enabled --quiet hex-webpanel.service 2>/dev/null || systemctl is-active --quiet hex-webpanel.service 2>/dev/null; then
+        ui_titulo "DESATIVAR PAINEL WEB"; ui_sep; ui_fila ""
+        echo -e "  Isso ${BOLD}para e desliga${NC} o painel (não inicia no boot) e ${BOLD}fecha${NC} a porta $port."
+        echo -e "  Você continua administrando tudo por este menu."
+        echo -ne "\n  ${YELLOW}Desativar o Painel Web? (s/n):${NC} "; read -r c
+        [ "$c" = "s" ] || [ "$c" = "S" ] || { echo -e "  ${GRIS}Cancelado${NC}"; pause_return; return; }
+        systemctl disable --now hex-webpanel.service >/dev/null 2>&1
+        fw_fechar_svc painel tcp "$port"; fw_persistir
+        echo -e "  ${GREEN}✓ Painel Web desativado${NC}"; pause_return; return
+    fi
+    ui_titulo "ATIVAR PAINEL WEB"; ui_sep; ui_fila ""
+    if quem=$(porta_ocupada_por "$port"); then
+        echo -e "  ${RED}✗ A porta $port já está em uso${NC} ${GRIS}${quem:+(processo: $quem)}${NC}"
+        echo -e "  ${GRIS}Mude a porta do painel (opção 5) e tente de novo.${NC}"; pause_return; return
+    fi
+    fw_abrir_svc painel tcp "$port"; fw_persistir
+    systemctl enable --now hex-webpanel.service >/dev/null 2>&1
+    sleep 2
+    if systemctl is-active --quiet hex-webpanel.service 2>/dev/null; then
+        echo -e "  ${GREEN}✓ Painel Web ativado${NC}  URL: ${CYAN}$(painel_url)${NC}"
+        aviso_firewall_provedor "$port"
+    else
+        echo -e "  ${RED}✗ O painel não iniciou (veja: journalctl -u hex-webpanel -n 30)${NC}"
+    fi
+    pause_return
+}
+
 gerenciar_webpanel() {
     while true; do
         clear; ui_top; ui_titulo "GERENCIAMENTO PAINEL WEB"; ui_sep
@@ -860,6 +1069,8 @@ gerenciar_webpanel() {
             ui_opcion "6" "Ver logs do painel"
             ui_opcion "7" "Desinstalar Painel Web"
             ui_opcion "8" "Segurança do acesso (HTTPS)"
+            ui_opcion "9" "Senha do painel (ver / redefinir)"
+            if systemctl is-enabled --quiet hex-webpanel.service 2>/dev/null; then ui_opcion "10" "Desativar Painel Web"; else ui_opcion "10" "Ativar Painel Web"; fi
             ui_opcion "0" "Voltar"
             
             ui_bot; echo ""; echo -ne "  ${CYAN}►${NC} Selecione a opção: "; read -r opt
@@ -871,6 +1082,8 @@ gerenciar_webpanel() {
                 4) echo ""; systemctl status hex-webpanel.service --no-pager; pause_return ;;
                 5) mudar_porta_webpanel ;;
                 8) menu_seguranca_painel ;;
+                9) menu_senha_painel ;;
+                10) painel_ativar_desativar ;;
                 6) echo ""; journalctl -u hex-webpanel.service -n 50 --no-pager; pause_return ;;
                 7)
                     echo -e "  ${CYAN}Desinstalando Painel Web...${NC}"

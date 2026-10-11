@@ -237,6 +237,7 @@ mostrar_resumo() {
         pass=$(sed -n 's/^Senha inicial do painel: //p' "$INITIAL_PASS_FILE")
         ui_fila " ${BOLD}Senha inicial:${NC} ${YELLOW}${pass}${NC}"
         ui_fila " ${RED}${BOLD}⚠ Anote e troque no dashboard.${NC} Arquivo: $INITIAL_PASS_FILE"
+        ui_fila " Esqueceu? ${BOLD}hex_menu → Painel Web → 9${NC} (ver a inicial ou gerar nova senha)"
     else
         ui_fila " ${BOLD}Senha:${NC} a que você já configurou (mantida)"
     fi

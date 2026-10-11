@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ═══════════════════════════════════════════════════════════════
-#  HEX WEB PANEL - backend (v1.1.3)
+#  HEX WEB PANEL - backend (v1.1.5)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #
 #  Mudanças de segurança em relação à v1.0.1:
@@ -15,6 +15,7 @@
 #   - system_stats (CPU/RAM/disco) exigido pelo dashboard.html
 #   v1.1.1: ações que alteram estado (delete_user, control_service, logout)
 #           agora são POST; token CSRF obrigatório em todo POST
+#   v1.1.5: `python app.py --reset-password` / `--set-password` (menu: Painel Web > 9)
 #   v1.1.2: HTTPS nativo opcional (HEX_PANEL_TLS=1 + /etc/hex/webpanel_tls/);
 #           use `hex_panel_mode.sh https` em vez de editar arquivos à mão
 # ═══════════════════════════════════════════════════════════════
@@ -975,6 +976,34 @@ def control_service(svc, action):
 
 
 # ───────────────────────── main ─────────────────────────
+def cli_set_password(new_password=None):
+    """Redefine a senha do admin pelo servidor (usado pelo menu). Sem argumento, gera uma aleatória.
+    Também troca a secret_key: derruba todas as sessões abertas (inclusive de quem não deveria estar)."""
+    generated = new_password is None
+    if generated:
+        new_password = secrets.token_urlsafe(9)
+    elif len(new_password) < 8 or len(new_password.encode("utf-8")) > 72:
+        print("Senha inválida: use de 8 a 72 caracteres.", file=sys.stderr)
+        return 2
+    if not save_password_hash(hash_password(new_password)):
+        print("Erro ao salvar a nova senha.", file=sys.stderr)
+        return 1
+    write_atomic(SECRET_FILE, secrets.token_bytes(32), 0o600)
+    if generated:
+        write_atomic(INITIAL_PASS_FILE,
+                     f"Senha inicial do painel: {new_password}\n"
+                     "Troque no dashboard; este arquivo é apagado quando você trocar.\n", 0o600)
+        print(f"NOVA_SENHA={new_password}")
+    else:
+        try:
+            os.remove(INITIAL_PASS_FILE)
+        except OSError:
+            pass
+        print("SENHA_DEFINIDA")
+    logging.info("Senha do painel redefinida pelo servidor (CLI); sessões antigas invalidadas")
+    return 0
+
+
 def run_https(host, port):
     """HTTPS nativo (cheroot). Só inicia se o certificado existir: nunca cai para HTTP em silêncio."""
     if not (os.path.isfile(TLS_CERT) and os.path.isfile(TLS_KEY)):
@@ -999,6 +1028,10 @@ def run_https(host, port):
 
 
 if __name__ == '__main__':
+    if len(sys.argv) > 1 and sys.argv[1] == "--reset-password":
+        sys.exit(cli_set_password())
+    if len(sys.argv) > 1 and sys.argv[1] == "--set-password":
+        sys.exit(cli_set_password(sys.stdin.readline().rstrip("\n")))
     host = os.environ.get("HEX_PANEL_HOST", "0.0.0.0")
     port = get_webpanel_port()
     if TLS_ENABLED:

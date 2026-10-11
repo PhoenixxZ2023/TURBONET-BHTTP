@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.1.7] - 2026-10-10
+
+### Alterado
+- **O instalador não ativa mais BHTTP, HCR e UDPGW.** Eles ficam instalados e desativados: nenhum serviço é iniciado, nenhuma porta é aberta no firewall e as listas de portas começam vazias
+- O resumo da instalação mostra "DESATIVADO (instalado)", o caminho do menu para ativar e as portas sugeridas (BHTTP 80/8880, HCR 8080, UDPGW 7300), com lembrete do firewall do provedor quando a VPS está atrás de NAT
+- **Reinstalar/atualizar religa só o que já estava ativo ou habilitado antes** e não sobrescreve as listas de portas
+
+### Adicionado
+- Menu de cada serviço (BHTTP, HCR, UDPGW): **opção 7 Ativar / Desativar**. Ativar pergunta a porta (padrão sugerido), verifica se está livre (mostra o processo que a usa), abre o firewall só dela, habilita no boot e inicia. Desativar para, desabilita e fecha o firewall, mantendo as portas na lista
+- Menu do Painel Web: **opção 10 Ativar / Desativar** (habilita/desabilita, abre/fecha a porta, recusa se a porta estiver em uso)
+- Tela de cada serviço mostra "Serviço: ● ATIVADO / ○ DESATIVADO"; o menu principal mostra "○ DESATIVADO" em vez de "SEM PORTAS"
+
+### Observação
+- Instalações existentes não mudam sozinhas: os serviços já ativos continuam como estão; só ganham a nova opção 7 ao atualizar o menu
+
+## [1.1.6] - 2026-10-09
+
+### Corrigido
+- O `dashboard.html` estava **em espanhol** (declarava `lang="es"`), então o Chrome oferecia traduzir e deformava termos, por exemplo "RAM" virava "BATER" e o selo "2/3" do UDPGW podia sair errado. A interface agora está inteira em português do Brasil: textos, botões, modais, confirmações, avisos e mensagens da atualização
+- `<html lang="pt-BR">` e `<meta name="google" content="notranslate">` no dashboard e no login, para o navegador não traduzir de novo
+- O formulário de troca da senha do **admin** pedia mínimo de 4 caracteres, mas o servidor exige 8; o formulário agora exige e informa 8 (a senha de usuário VPN continua com mínimo de 4)
+
+### Observação
+- Só texto mudou: IDs, classes, rotas, funções JavaScript e expressões Jinja do template são idênticos aos da versão anterior (conferido por comparação automática)
+
+## [1.1.5] - 2026-10-09
+
+### Adicionado
+- Menu: Painel Web → 9) Senha do painel: ver a senha inicial (se ainda não foi trocada), gerar nova senha aleatória ou definir a própria
+- `app.py --reset-password` e `--set-password` (a senha vai por stdin, não aparece na lista de processos). Redefinir troca a secret_key e desconecta todas as sessões abertas; o menu reinicia o painel (isso também zera bloqueios de login por tentativas)
+- O resumo da instalação do painel avisa onde recuperar a senha
+
 ## [1.1.4] - 2026-10-08
 
 ### Corrigido

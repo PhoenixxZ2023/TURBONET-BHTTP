@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.1.8] - 2026-10-10
+
+### Segurança
+- **A sessão do painel agora expira por inatividade** (padrão 3 min; antes nunca expirava). A atividade vem do que a pessoa faz (mouse, teclado, rolagem, toque) por um aviso ao servidor (`/api/ping`); a atualização automática (`/api/stats`) não conta. O servidor confere o prazo em toda requisição (um cookie antigo é recusado mesmo com assinatura válida); o navegador avisa 30 s antes e encerra a sessão no prazo
+- Ações com sessão expirada vão para o login e não são executadas; chamadas de API recebem 401
+- Tempo configurável: `HEX_SESSION_IDLE_SECONDS` (30 a 86400 s) ou `hex_panel_mode.sh idle <segundos>` / menu
+
+### Adicionado
+- **Domínio/subdomínio para o painel**, com HTTPS e certificado autoassinado que já inclui o domínio: `hex_panel_mode.sh domain <dominio>` e menu Painel Web → 8 → 6/7. Detecta se o DNS aponta direto para a VPS (nuvem cinza), passa pela Cloudflare (nuvem laranja), aponta para outro IP ou não resolve, e orienta o ajuste. Com proxy da Cloudflare confere a porta (443, 2053, 2083, 2087, 2096, 8443) e oferece mudar para 8443, com reversão automática se o painel não subir
+- IP real do visitante atrás da Cloudflare (`CF-Connecting-IP`) para o limite de tentativas de login e os logs, aceito só de IPs da Cloudflare (o cabeçalho não pode ser forjado de fora). `HEX_TRUST_CLOUDFLARE=0` desliga
+- Menu Painel Web → 8: opções 6 (domínio), 7 (remover domínio) e 8 (tempo de inatividade)
+
+### Observação
+- A "atualização automática" do dashboard (a cada 30 s) só consulta `/api/stats` e descarta a resposta; ela não atualiza os números na tela. Isso já era assim e não foi alterado
+
 ## [1.1.7] - 2026-10-10
 
 ### Alterado

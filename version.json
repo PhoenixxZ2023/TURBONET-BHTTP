@@ -1,22 +1,22 @@
 {
-  "version": "1.1.7",
-  "release_date": "2026-10-11",
-  "changelog": "Servicos instalados desativados: ativar/desativar pelo menu de cada servico e do painel; reinstalacao preserva o estado",
+  "version": "1.1.8",
+  "release_date": "2026-10-12",
+  "changelog": "Sessao do painel expira por inatividade (3 min); dominio/subdominio com Cloudflare e certificado autoassinado",
   "components": {
-    "menu": "1.1.7",
-    "templates": "1.1.7",
-    "backend": "1.1.7"
+    "menu": "1.1.8",
+    "templates": "1.1.8",
+    "backend": "1.1.8"
   },
   "sha256": {
-    "app.py": "a027ea8c5fea424761493cadeef2a8a50d0aa9bfb5d3d639e2d79b47b74f4116",
-    "hex_menu.sh": "7b92362c520ea327cd0aee30b6dfb714cd24b30cd70c94a9bfd589e9a0005eb2",
+    "app.py": "a6e725d5538669f34c15b21f3bb32d0a89aa8d09f8234a1036de884d761f9ef0",
+    "hex_menu.sh": "669d22835e6098da783cc2a32feb7596bb15ad6331af2e1629ab1f3ea9498e59",
     "hex_cleanup.sh": "37a159a3d0457cd5ab0f478a7c4929cc4ebea66dd35ffcf4d1c7ab102c48bac0",
-    "hex_panel_mode.sh": "1bc82d9421db8db990a289906f61d7ce74229ed63faab3d0cc7aa51ec23b06e6",
+    "hex_panel_mode.sh": "f76cbe90d327637f4893bfb18ca03d750860e3bfee2ac6fbeef7bf66fe30f07c",
     "hex_ip.sh": "f44193b8c51cba92d0615c03739e2a409ad16b5cfe7c3e758e53e81cc7d04d98",
     "install.sh": "40b83185d631ef893676bd9aea2d1a09c7dc00c17e1c9e8a2f716e2b5da47a1e",
     "install_webpanel.sh": "928312445f2cd8efa051969c14d99d7f14b52e36fa20344a3a1b74fe3d8900dd",
     "templates/login.html": "6c0de9b65e0a4634670eaf7774810a9590627800c741bdd29e9e24b343065047",
-    "templates/dashboard.html": "bb856bcfc97a414b793476edb1ba19af4a84983f612814fd9a74b7fd757ff4fc",
+    "templates/dashboard.html": "fadfb6fb0968871adeb514699d74d6df905def2e4301a023d0b6c0ef9556a8bb",
     "bhttp-server-v2.4.0-btun-compat-linux-amd64": "fc86704c532eecac013b1f48063360a8bef754de6b332ce6e9a32de4aec0c750",
     "bhttp-server-v2.4.0-btun-compat-linux-arm64": "344da35ae482c1d3b9e71358edd3172b406dd881a4177dbbfcfaccacbfb19b42",
     "bhttp-server-v2.4.1-btun-compat-keepalive-linux-amd64": "65c1fd59e2c5690253beb435b55b15dcccfd61423aa89207c9c82a8f7f85fd28",

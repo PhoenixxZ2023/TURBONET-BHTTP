@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ═══════════════════════════════════════════════════════════════
-#  MANAGER - MENU DE GERENCIAMENTO COMPLETO (v1.1.2)
+#  MANAGER - MENU DE GERENCIAMENTO COMPLETO (v1.1.8)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #  Com sistema de atualização automática e porta web configurável
 # ═══════════════════════════════════════════════════════════════
@@ -497,6 +497,28 @@ painel_modo_script() {
     fi
     [ -x "$sc" ]
 }
+painel_aplicar_porta() {   # <nova_porta>: troca a porta do painel (serviço + firewall) e reverte se não subir
+    local new=$1 old quem
+    old=$(cat "$WEBPANEL_PORT_FILE" 2>/dev/null || echo 9000)
+    [ "$new" = "$old" ] && return 0
+    if quem=$(porta_ocupada_por "$new"); then
+        echo -e "  ${RED}✗ A porta $new já está em uso${NC} ${GRIS}${quem:+(processo: $quem)}${NC}"; return 1
+    fi
+    systemctl stop hex-webpanel.service 2>/dev/null
+    echo "$new" > "$WEBPANEL_PORT_FILE"; chmod 644 "$WEBPANEL_PORT_FILE"
+    fw_fechar_svc painel tcp "$old"; fw_abrir_svc painel tcp "$new"; fw_persistir
+    systemctl start hex-webpanel.service 2>/dev/null; sleep 2
+    if systemctl is-active --quiet hex-webpanel.service 2>/dev/null; then
+        WEBPANEL_PORT=$new
+        echo -e "  ${GREEN}✓ Porta do painel alterada para $new${NC}"
+        aviso_firewall_provedor "$new"
+        return 0
+    fi
+    echo -e "  ${RED}✗ O painel não subiu na porta $new; restaurando a porta $old...${NC}"
+    echo "$old" > "$WEBPANEL_PORT_FILE"; fw_fechar_svc painel tcp "$new"; fw_abrir_svc painel tcp "$old"; fw_persistir
+    systemctl start hex-webpanel.service 2>/dev/null
+    return 1
+}
 menu_seguranca_painel() {
     local sc=/usr/local/bin/hex_panel_mode.sh
     while true; do
@@ -511,6 +533,9 @@ menu_seguranca_painel() {
         ui_opcion "3" "Gerar novo certificado HTTPS"
         ui_opcion "4" "Somente local (127.0.0.1) ${GRIS}- avançado${NC}"
         ui_opcion "5" "Liberar acesso externo"
+        ui_opcion "6" "Usar um domínio (Cloudflare / DNS) ${GRIS}- ex.: painel.seudominio.com${NC}"
+        ui_opcion "7" "Remover o domínio"
+        ui_opcion "8" "Tempo de inatividade da sessão"
         ui_opcion "0" "Voltar"
         ui_bot; echo ""; echo -ne "  ${CYAN}►${NC} Selecione a opção: "; read -r opt
         case "$opt" in
@@ -522,6 +547,22 @@ menu_seguranca_painel() {
                echo -ne "  ${YELLOW}Continuar? (s/n):${NC} "; read -r c
                if [ "$c" = "s" ] || [ "$c" = "S" ]; then echo ""; "$sc" local; fi; pause_return ;;
             5) echo ""; "$sc" external; pause_return ;;
+            6) echo -e "  ${GRIS}Crie antes, na Cloudflare, um registro A: seu-subdominio → IP da VPS ($(ip_publico)).${NC}"
+               echo -ne "  ${WHITE}Domínio (ex.: painel.seudominio.com):${NC} "; read -r dom
+               echo ""; "$sc" domain "$dom"; rc=$?
+               WEBPANEL_PORT=$(cat "$WEBPANEL_PORT_FILE" 2>/dev/null || echo 9000)
+               if [ "$rc" -eq 0 ] && ! "$sc" cf-port-ok; then
+                   echo -ne "\n  ${YELLOW}Mudar a porta do painel para 8443 agora (aceita pela Cloudflare)? (S/n):${NC} "; read -r c
+                   if [ "$c" != "n" ] && [ "$c" != "N" ]; then
+                       painel_aplicar_porta 8443 && echo -e "  ${GREEN}URL: $(painel_url)${NC}"
+                   fi
+               fi
+               pause_return ;;
+            7) echo -ne "  ${YELLOW}Remover o domínio do painel? (s/n):${NC} "; read -r c
+               if [ "$c" = "s" ] || [ "$c" = "S" ]; then echo ""; "$sc" domain off; fi; pause_return ;;
+            8) echo -ne "  ${WHITE}Minutos de inatividade até sair (1 a 1440)${NC} ${GRIS}[3]${NC}: "; read -r mins; mins=${mins:-3}
+               if [[ "$mins" =~ ^[0-9]+$ ]] && [ "$mins" -ge 1 ] && [ "$mins" -le 1440 ]; then echo ""; "$sc" idle $((mins * 60))
+               else echo -e "  ${RED}✗ Informe um número de 1 a 1440${NC}"; fi; pause_return ;;
             0) return ;;
             *) echo -e "  ${RED}✗ Opção inválida${NC}"; pause_return ;;
         esac

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ═══════════════════════════════════════════════════════════════
-#  HEX WEB PANEL - backend (v1.1.5)
+#  HEX WEB PANEL - backend (v1.1.8)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #
 #  Mudanças de segurança em relação à v1.0.1:
@@ -15,16 +15,17 @@
 #   - system_stats (CPU/RAM/disco) exigido pelo dashboard.html
 #   v1.1.1: ações que alteram estado (delete_user, control_service, logout)
 #           agora são POST; token CSRF obrigatório em todo POST
+#   v1.1.8: sessão expira por INATIVIDADE (padrão 180 s); IP real atrás da Cloudflare
 #   v1.1.5: `python app.py --reset-password` / `--set-password` (menu: Painel Web > 9)
 #   v1.1.2: HTTPS nativo opcional (HEX_PANEL_TLS=1 + /etc/hex/webpanel_tls/);
 #           use `hex_panel_mode.sh https` em vez de editar arquivos à mão
 # ═══════════════════════════════════════════════════════════════
 import os, re, json, time, hashlib, hmac, secrets, logging, tempfile, threading
-import subprocess, datetime, fcntl, shutil, urllib.request, ssl, sys
+import subprocess, datetime, fcntl, shutil, urllib.request, ssl, sys, ipaddress
 from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort, session
-from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user
+from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 import bcrypt
 
 try:
@@ -58,6 +59,26 @@ TLS_CERT = os.path.join(HEX_DIR, "webpanel_tls", "cert.pem")
 TLS_KEY = os.path.join(HEX_DIR, "webpanel_tls", "key.pem")
 TLS_ENABLED = os.environ.get("HEX_PANEL_TLS") == "1"
 USER_GROUP = "hexusers"
+
+def _idle_seconds():
+    """Tempo de inatividade até a sessão expirar (padrão 3 min; mínimo 30 s, máximo 24 h)."""
+    try:
+        v = int(os.environ.get("HEX_SESSION_IDLE_SECONDS", "180"))
+    except ValueError:
+        v = 180
+    return max(30, min(v, 86400))
+
+
+IDLE_TIMEOUT = _idle_seconds()
+PASSIVE_PATHS = {"/api/stats"}   # consultas automáticas em segundo plano NÃO contam como atividade
+
+# Faixas de IPv4 da Cloudflare (https://www.cloudflare.com/ips-v4). Só confiamos no cabeçalho
+# CF-Connecting-IP quando a conexão vem mesmo de uma dessas faixas (senão qualquer um forjaria o IP).
+CF_NETS = [ipaddress.ip_network(n) for n in (
+    "173.245.48.0/20", "103.21.244.0/22", "103.22.200.0/22", "103.31.4.0/22", "141.101.64.0/18",
+    "108.162.192.0/18", "190.93.240.0/20", "188.114.96.0/20", "197.234.240.0/22", "198.41.128.0/17",
+    "162.158.0.0/15", "104.16.0.0/13", "104.24.0.0/14", "172.64.0.0/13", "131.0.72.0/22")]
+TRUST_CLOUDFLARE = os.environ.get("HEX_TRUST_CLOUDFLARE", "1") != "0"
 
 SYSTEMCTL = '/usr/bin/systemctl'
 USERADD = '/usr/sbin/useradd'
@@ -209,6 +230,20 @@ ADMIN_PASSWORD_HASH = load_admin_password()
 TRUSTED_HOSTS = {h.strip() for h in os.environ.get("HEX_TRUSTED_HOSTS", "").split(",") if h.strip()}
 
 
+def client_ip():
+    """IP real do cliente. Atrás da Cloudflare, usa CF-Connecting-IP (só se a conexão vier da Cloudflare)."""
+    ra = request.remote_addr or "?"
+    if TRUST_CLOUDFLARE:
+        try:
+            if any(ipaddress.ip_address(ra) in n for n in CF_NETS):
+                cf = request.headers.get("CF-Connecting-IP", "").strip()
+                ipaddress.ip_address(cf)
+                return cf
+        except ValueError:
+            pass
+    return ra
+
+
 class User(UserMixin):
     def __init__(self, id):
         self.id = id
@@ -230,7 +265,7 @@ def csrf_token():
 
 @app.context_processor
 def inject_csrf():
-    return {"csrf_token": csrf_token}
+    return {"csrf_token": csrf_token, "idle_timeout": IDLE_TIMEOUT}
 
 
 @app.before_request
@@ -241,13 +276,35 @@ def check_csrf():
         if origin:
             host = urlparse(origin).netloc
             if host != request.host and host not in TRUSTED_HOSTS:
-                logging.warning(f"Origin bloqueada: {origin!r} de {request.remote_addr}")
+                logging.warning(f"Origin bloqueada: {origin!r} de {client_ip()}")
                 abort(403)
         sent = request.form.get("csrf_token") or request.headers.get("X-CSRF-Token") or ""
         expected = session.get("_csrf", "")
         if not expected or not hmac.compare_digest(sent.encode("utf-8"), expected.encode("utf-8")):
-            logging.warning(f"CSRF inválido em {request.path} de {request.remote_addr}")
+            logging.warning(f"CSRF inválido em {request.path} de {client_ip()}")
             abort(403)
+
+
+@app.before_request
+def enforce_idle_timeout():
+    """Sessão expira após IDLE_TIMEOUT s sem atividade (a atividade é registrada em cada
+    requisição, exceto as passivas, e pelo /api/ping que o navegador envia quando a pessoa mexe)."""
+    if request.endpoint in (None, "static", "login") or not current_user.is_authenticated:
+        return None
+    now = int(time.time())
+    last = session.get("last_seen")
+    if not isinstance(last, int) or now - last > IDLE_TIMEOUT:
+        logging.info(f"Sessão expirada por inatividade ({client_ip()})")
+        logout_user()
+        session.clear()
+        msg = "Sessão expirada por inatividade. Entre novamente."
+        flash(msg)
+        if request.path.startswith("/api/") or request.path == "/update_now":
+            return jsonify({"expired": True, "message": msg}), 401
+        return redirect(url_for("login"))
+    if request.path not in PASSIVE_PATHS:
+        session["last_seen"] = now
+    return None
 
 
 @app.errorhandler(403)
@@ -684,7 +741,7 @@ def empty_stats():
 @app.route('/login', methods=['GET', 'POST'])
 def login():
     if request.method == 'POST':
-        ip = request.remote_addr or '?'
+        ip = client_ip() or '?'
         wait = login_blocked(ip)
         if wait:
             flash(f'Muitas tentativas. Tente de novo em {wait // 60 + 1} min.')
@@ -694,6 +751,7 @@ def login():
             clear_fails(ip)
             login_user(User("admin"))
             session["_csrf"] = secrets.token_urlsafe(32)
+            session["last_seen"] = int(time.time())
             logging.info(f"Login com sucesso de {ip}")
             if password in OLD_DEFAULT_PASSWORDS:
                 flash("⚠ Você está usando a senha padrão antiga. Troque agora no painel.")
@@ -707,7 +765,11 @@ def login():
 @app.route('/logout', methods=['POST'])
 @login_required
 def logout():
+    reason = request.form.get("reason")
     logout_user()
+    session.pop("last_seen", None)
+    if reason == "idle":
+        flash("Sessão encerrada por inatividade. Entre novamente.")
     return redirect(url_for('login'))
 
 
@@ -719,6 +781,13 @@ def dashboard():
         flash("Erro ao carregar o dashboard")
         stats = empty_stats()
     return render_template('dashboard.html', stats=stats, users=get_users())
+
+
+@app.route('/api/ping', methods=['POST'])
+@login_required
+def api_ping():
+    """O navegador chama quando a pessoa mexe no painel; o before_request já renovou a sessão."""
+    return jsonify({"ok": True, "idle_timeout": IDLE_TIMEOUT})
 
 
 @app.route('/api/stats')
@@ -738,7 +807,7 @@ def change_password():
         cur = request.form.get('current_password', '')
         new = request.form.get('new_password', '')
         conf = request.form.get('confirm_password', '')
-        logging.info(f"[CHANGE_PASS] Solicitação de {request.remote_addr}")
+        logging.info(f"[CHANGE_PASS] Solicitação de {client_ip()}")
         if len(new) < 8 or len(new.encode('utf-8')) > 72:
             flash("A nova senha deve ter entre 8 e 72 caracteres")
         elif new != conf:
@@ -829,7 +898,7 @@ def add_user():
             entries = [e for e in read_db() if e[0] != user]
             entries.append((user, pwd, exp_date))
             write_db(entries)
-        logging.info(f"Usuário criado: {user} (exp {exp_date}) por {request.remote_addr}")
+        logging.info(f"Usuário criado: {user} (exp {exp_date}) por {client_ip()}")
         flash(f"✓ Usuário '{user}' criado com sucesso (Expira: {exp_date})")
     except Exception as e:
         logging.error(f"Erro criando usuário: {e}", exc_info=True)
@@ -859,7 +928,7 @@ def delete_user(username):
             return redirect(url_for('dashboard'))
         with DbLock():
             write_db([e for e in read_db() if e[0] != username])
-        logging.info(f"Usuário removido: {username} por {request.remote_addr}")
+        logging.info(f"Usuário removido: {username} por {client_ip()}")
         flash(f"✓ Usuário '{username}' removido com sucesso")
     except Exception as e:
         logging.error(f"Erro removendo usuário: {e}", exc_info=True)
@@ -873,7 +942,7 @@ def edit_password(username):
     try:
         new = request.form.get('new_password', '')
         conf = request.form.get('confirm_password', '')
-        logging.info(f"[EDIT_PASS] Troca de senha para {username} de {request.remote_addr}")
+        logging.info(f"[EDIT_PASS] Troca de senha para {username} de {client_ip()}")
         if not _managed_or_flash(username):
             return redirect(url_for('dashboard'))
         if not valid_user_password(new):
@@ -902,7 +971,7 @@ def edit_password(username):
 def edit_expiry(username):
     try:
         action = request.form.get('action', '')
-        logging.info(f"[EDIT_EXP] Troca de expiração para {username} de {request.remote_addr}")
+        logging.info(f"[EDIT_EXP] Troca de expiração para {username} de {client_ip()}")
         if not _managed_or_flash(username):
             return redirect(url_for('dashboard'))
         if not system_user_exists(username):

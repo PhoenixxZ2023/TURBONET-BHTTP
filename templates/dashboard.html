@@ -1791,6 +1791,7 @@
         async function refreshData() {
             try {
                 const response = await fetch('/api/stats');
+                if (response.status === 401) { irParaLogin(); return; }
                 const data = await response.json();
                 if (data.error) return;
             } catch (error) {
@@ -1816,6 +1817,59 @@
             f.submit();
             return false;
         }
+
+        // ═══ EXPIRAÇÃO DA SESSÃO POR INATIVIDADE ═══
+        // A atualização automática (/api/stats) NÃO conta como atividade; só o que a pessoa faz.
+        const IDLE_TIMEOUT = {{ idle_timeout }};              // segundos, definido no servidor
+        const PING_MIN_INTERVAL = 10000;                      // avisa o servidor no máximo a cada 10 s
+        const AVISO_ANTES = Math.min(30, Math.floor(IDLE_TIMEOUT / 3));
+        let serverLast = Date.now();                          // última vez que o SERVIDOR registrou atividade
+        let pingEmAndamento = false, avisoExibido = false, encerrando = false;
+
+        function irParaLogin() { window.location.href = '/login'; }
+
+        function encerrarPorInatividade() {
+            if (encerrando) return;
+            encerrando = true;
+            const f = document.createElement('form');
+            f.method = 'POST'; f.action = '/logout';
+            [['csrf_token', CSRF_TOKEN], ['reason', 'idle']].forEach(([k, v]) => {
+                const i = document.createElement('input');
+                i.type = 'hidden'; i.name = k; i.value = v; f.appendChild(i);
+            });
+            document.body.appendChild(f);
+            f.submit();
+        }
+
+        function enviarPing() {
+            if (pingEmAndamento) return;
+            pingEmAndamento = true;
+            fetch('/api/ping', { method: 'POST', headers: { 'X-CSRF-Token': CSRF_TOKEN } })
+                .then(r => {
+                    if (r.status === 401) { irParaLogin(); return; }
+                    if (r.ok) { serverLast = Date.now(); avisoExibido = false; }
+                })
+                .catch(() => {})
+                .finally(() => { pingEmAndamento = false; });
+        }
+
+        function registrarAtividade() {
+            if (Date.now() - serverLast >= PING_MIN_INTERVAL) enviarPing();
+        }
+
+        function verificarInatividade() {
+            const restante = IDLE_TIMEOUT - (Date.now() - serverLast) / 1000;
+            if (restante <= 0) { encerrarPorInatividade(); return; }
+            if (restante <= AVISO_ANTES && !avisoExibido) {
+                avisoExibido = true;
+                showToast('warning', 'Sessão prestes a expirar',
+                          'Por inatividade você será desconectado em ' + Math.ceil(restante) + 's. Mexa o mouse para continuar.', 6000);
+            }
+        }
+
+        ['mousemove', 'mousedown', 'keydown', 'wheel', 'scroll', 'touchstart'].forEach(ev =>
+            document.addEventListener(ev, registrarAtividade, { passive: true, capture: true }));
+        setInterval(verificarInatividade, 1000);
 
         function openPasswordModal() {
             new bootstrap.Modal(document.getElementById('changePasswordModal')).show();

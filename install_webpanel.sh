@@ -12,6 +12,7 @@ trap 'rm -rf "$TMPDIR"' EXIT
 
 HEX_FAIL_ON_HASH_MISMATCH=${HEX_FAIL_ON_HASH_MISMATCH:-0}
 HEX_REQUIRE_CHECKSUM=${HEX_REQUIRE_CHECKSUM:-0}
+HEX_ENABLE_SERVICE=${HEX_ENABLE_SERVICE:-1}   # se 1, cria e ativa o unit systemd automaticamente
 
 ui_info(){ echo -e "\e[36m[+] $*\e[0m"; }
 ui_warn(){ echo -e "\e[33m[!] $*\e[0m"; }
@@ -59,6 +60,30 @@ baixar_verificado_simple(){
   return 0
 }
 
+escrever_unit_painel(){
+  local unit_path="/etc/systemd/system/hex-webpanel.service"
+  ui_info "Escrevendo unit systemd em $unit_path"
+  cat > "$unit_path" <<EOT
+[Unit]
+Description=Hex Web Panel
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=$DEST_DIR
+ExecStart=$DEST_DIR/venv/bin/python $DEST_DIR/app.py
+Restart=always
+RestartSec=5
+User=root
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
+EOT
+  chmod 644 "$unit_path"
+  ui_ok "Unit escrito: $unit_path"
+}
+
 main(){
   ui_info "Instalando painel web em $DEST_DIR"
   mkdir -p "$DEST_DIR"
@@ -89,17 +114,37 @@ main(){
     fi
   done
 
+  # criar venv mínimo
   if [ ! -x "$DEST_DIR/venv/bin/python" ]; then
     ui_info "Criando virtualenv..."
     python3 -m venv "$DEST_DIR/venv" || { ui_warn "venv falhou (talvez python3-venv não instalado)"; }
   fi
 
+  # tentativa de compilar python files
   if [ -x "$DEST_DIR/venv/bin/python" ]; then
     "$DEST_DIR/venv/bin/python" -m py_compile "$DEST_DIR/app.py" 2>/dev/null || ui_warn "app.py pode conter erro de sintaxe"
   fi
 
+  # criar unit systemd para o painel e ativar
+  if [ "$HEX_ENABLE_SERVICE" = "1" ]; then
+    if command -v systemctl >/dev/null 2>&1; then
+      escrever_unit_painel
+      ui_info "Recarregando systemd e habilitando serviço"
+      systemctl daemon-reload || ui_warn "systemctl daemon-reload falhou"
+      if systemctl enable --now hex-webpanel.service >/dev/null 2>&1; then
+        ui_ok "Serviço hex-webpanel habilitado e iniciado"
+      else
+        ui_warn "Falha ao ativar/iniciar hex-webpanel.service — verifique /var/log/syslog e 'systemctl status hex-webpanel.service'"
+      fi
+    else
+      ui_warn "systemd não encontrado; pulando criação do serviço"
+    fi
+  else
+    ui_info "HEX_ENABLE_SERVICE=0, pulando criação do serviço systemd"
+  fi
+
   ui_ok "Instalação básica concluída (arquivos baixados)."
-  ui_info "Execute: sudo bash /opt/hex-webpanel/scripts/deploy_runtime_complete.sh para aplicar separação de privilégios (se desejar)."
+  ui_info "Se desejar, execute: sudo bash /opt/hex-webpanel/scripts/deploy_runtime_complete.sh para aplicar separação de privilégios."
 
   return 0
 }

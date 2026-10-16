@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Dependências
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y shellcheck
+          pip install -r tests/requirements.txt
+
+      - name: Sintaxe (bash e python)
+        run: |
+          for f in *.sh; do bash -n "$f"; done
+          python -m py_compile app.py
+
+      - name: ShellCheck
+        run: shellcheck -x -S warning -e SC2034,SC2154,SC2155,SC2206 *.sh
+
+      # hex_menu.sh, install.sh e install_webpanel.sh são MONTADOS a partir de src/. Se você editou src/ e
+      # esqueceu de rodar ./build.sh, o arquivo que as VPS baixam ficaria desatualizado.
+      - name: Scripts montados estão em dia com src/
+        run: bash ./build.sh --check
+
+      # Se você mudou algum arquivo e esqueceu de rodar ./gen_version.sh, toda instalação
+      # falharia com "SHA256 não confere". Este passo impede de publicar assim.
+      - name: version.json confere com os arquivos
+        run: bash ./gen_version.sh --check
+
+      - name: Testes
+        run: python -m pytest

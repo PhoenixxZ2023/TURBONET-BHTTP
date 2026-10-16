@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ═══════════════════════════════════════════════════════════════
-#  MANAGER - MENU DE GERENCIAMENTO COMPLETO (v1.1.8)
+#  MANAGER - MENU DE GERENCIAMENTO COMPLETO (v1.2.0)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #  Com sistema de atualização automática e porta web configurável
 # ═══════════════════════════════════════════════════════════════
@@ -129,24 +129,43 @@ ui_error() { echo -e "     ${RED}✗${NC} ${RED}$1${NC}"; }
 UDPGW_PUBLIC_FLAG="/etc/hex/udpgw_public"
 valid_username() { [[ "$1" =~ ^[a-z_][a-z0-9_-]{0,31}$ ]]; }
 valid_user_password() { [[ ${#1} -ge 4 && ${#1} -le 64 && "$1" != *:* && "$1" =~ ^[[:print:]]+$ ]]; }
-db_lock() { exec 8>"/etc/hex/.users.lock"; flock 8; }
+db_lock() { exec 8>"${HEX_DIR:-/etc/hex}/.users.lock"; flock 8; }
 db_has() { awk -F: -v u="$1" '$1==u{f=1} END{exit !f}' "$USER_DB"; }
-# db_update <usuário> pass|exp|delete [valor]   (chamar dentro de: ( db_lock; db_update ... ))
+# db_update <usuário> exp|delete [valor]   (chamar dentro de: ( db_lock; db_update ... ))
+# Formato do users.txt: usuario:validade  (a senha NÃO é guardada aqui; fica só no hash do sistema)
 db_update() {
     local user="$1" field="$2" value="${3:-}" tmp
-    tmp=$(mktemp /etc/hex/users.XXXXXX) || return 1
+    tmp=$(mktemp "${HEX_DIR:-/etc/hex}/users.XXXXXX") || return 1
     if HEX_U="$user" HEX_F="$field" HEX_V="$value" awk '
         { n=split($0,a,":"); u=a[1]; e=a[n]
-          if (u != ENVIRON["HEX_U"] || n < 3) { print; next }
-          p=substr($0, length(u)+2, length($0)-length(u)-length(e)-2)
+          if (u != ENVIRON["HEX_U"]) { print; next }
           if (ENVIRON["HEX_F"]=="delete") next
-          if (ENVIRON["HEX_F"]=="pass") p=ENVIRON["HEX_V"]
           if (ENVIRON["HEX_F"]=="exp") e=ENVIRON["HEX_V"]
-          print u ":" p ":" e }' "$USER_DB" > "$tmp"; then
+          print u ":" e }' "$USER_DB" > "$tmp"; then
         chmod 600 "$tmp" && mv -f "$tmp" "$USER_DB"
     else
         rm -f "$tmp"; return 1
     fi
+}
+# converte o formato antigo (usuario:senha:validade) para usuario:validade; idempotente
+migrar_users_db() {
+    [ -s "$USER_DB" ] || return 0
+    (
+        db_lock
+        awk -F: 'NF>2{f=1} END{exit !f}' "$USER_DB" || exit 0
+        tmp=$(mktemp "${HEX_DIR:-/etc/hex}/users.XXXXXX") || exit 1
+        if awk '{ n=split($0,a,":"); if (n>2) print a[1] ":" a[n]; else print }' "$USER_DB" > "$tmp"; then
+            chmod 600 "$tmp" && mv -f "$tmp" "$USER_DB"
+        else
+            rm -f "$tmp"
+        fi
+    )
+}
+# shell dos NOVOS usuários: padrão = só túnel (nologin); /etc/hex/user_shell pode mudar
+shell_padrao_novos() {
+    local sh; sh=$(cat "${HEX_DIR:-/etc/hex}/user_shell" 2>/dev/null)
+    case "$sh" in /bin/bash|/bin/sh|/bin/false|/usr/sbin/nologin) [ -e "$sh" ] && { echo "$sh"; return; } ;; esac
+    if [ -x /usr/sbin/nologin ]; then echo /usr/sbin/nologin; else echo /bin/false; fi
 }
 
 get_svc_status() {
@@ -242,6 +261,7 @@ menu_atualizacoes() {
         ui_opcion "3" "Atualizar backend do Painel Web (app.py)"
         ui_opcion "4" "Atualizar TUDO (recomendado)"
         ui_opcion "5" "Ver changelog completo"
+        ui_opcion "6" "Chave de assinatura (conferir / fixar)"
         ui_opcion "0" "Voltar"
         
         ui_bot; echo ""
@@ -253,6 +273,7 @@ menu_atualizacoes() {
             3) atualizar_backend ;;
             4) atualizar_tudo ;;
             5) ver_changelog ;;
+            6) menu_chave_assinatura; menu_atualizacoes ;;
             0) menu_principal ;;
             *) echo -e "  ${RED}✗ Opção inválida${NC}"; pause_return; menu_atualizacoes ;;
         esac
@@ -269,12 +290,84 @@ menu_atualizacoes() {
 }
 
 # ── OTA seguro: manifesto + SHA256 + sintaxe + troca atômica ──
+# ═══════════════════════════════════════════════════════════════
+#  ASSINATURA DO version.json (Ed25519 via OpenSSL 3, já presente no Ubuntu 22.04+)
+#  Fonte única: usado pelos instaladores E pelo menu (via ./build.sh).
+#
+#  Modelo de confiança: a chave PÚBLICA fica fixada em /etc/hex/release_pub.pem. Depois de fixada,
+#  atualização sem assinatura válida é RECUSADA (não dá para "tirar" a assinatura e passar).
+#  A chave privada fica só com o dono do projeto, fora do repositório.
+# ═══════════════════════════════════════════════════════════════
+HEX_PUBKEY="${HEX_PUBKEY:-${HEX_DIR:-/etc/hex}/release_pub.pem}"
+
+# impressão digital da chave pública (SHA-256 do DER), em pares hex separados por ":"
+hex_fingerprint() {
+    openssl pkey -pubin -in "$1" -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1 | sed 's/../&:/g; s/:$//'
+}
+
+# hex_verificar_assinatura <manifesto> <assinatura-base64> <chave.pem>  → 0 = válida
+hex_verificar_assinatura() {
+    local man=$1 sig=$2 key=$3 bin rc
+    [ -s "$man" ] && [ -s "$sig" ] && [ -s "$key" ] || return 1
+    bin=$(mktemp) || return 1
+    if ! base64 -d "$sig" > "$bin" 2>/dev/null || [ ! -s "$bin" ]; then rm -f "$bin"; return 1; fi
+    openssl pkeyutl -verify -pubin -inkey "$key" -rawin -in "$man" -sigfile "$bin" >/dev/null 2>&1
+    rc=$?
+    rm -f "$bin"
+    return $rc
+}
+
+# hex_politica_assinatura <manifesto> [assinatura]  → 0 = pode seguir; 1 = recusar (motivo no stdout)
+# Com chave fixada a assinatura é obrigatória. HEX_ALLOW_UNSIGNED=1 desliga (só para recuperação).
+hex_politica_assinatura() {
+    local man=$1 sig=${2:-}
+    [ -s "$HEX_PUBKEY" ] || return 0
+    [ "${HEX_ALLOW_UNSIGNED:-0}" = "1" ] && return 0
+    if [ -n "$sig" ] && hex_verificar_assinatura "$man" "$sig" "$HEX_PUBKEY"; then return 0; fi
+    echo "assinatura ausente ou inválida (chave fixada: $(hex_fingerprint "$HEX_PUBKEY"))"
+    return 1
+}
+
 hex_obter_manifesto() {
+    local sig motivo
     HEX_MANIFEST=$(mktemp) || return 1
+    sig="${HEX_MANIFEST}.sig"
     if curl -fsSL --connect-timeout 10 "${GITHUB_RAW}/version.json" -o "$HEX_MANIFEST" 2>/dev/null && [ -s "$HEX_MANIFEST" ]; then
-        return 0
+        curl -fsSL --connect-timeout 10 "${GITHUB_RAW}/version.json.sig" -o "$sig" 2>/dev/null || rm -f "$sig"
+        if motivo=$(hex_politica_assinatura "$HEX_MANIFEST" "$sig"); then rm -f "$sig"; return 0; fi
+        ui_error "Atualização RECUSADA: $motivo"
+        rm -f "$HEX_MANIFEST" "$sig"; return 1
     fi
-    rm -f "$HEX_MANIFEST"; return 1
+    rm -f "$HEX_MANIFEST" "$sig"; return 1
+}
+
+# Mostra a chave de assinatura fixada ou, se ainda não houver, deixa fixar a publicada em keys/release_pub.pem
+# DEPOIS de você conferir a impressão digital com a divulgada pelo dono do projeto (README/perfil do GitHub).
+menu_chave_assinatura() {
+    local tmp c
+    clear; ui_top; ui_titulo "CHAVE DE ASSINATURA DAS ATUALIZAÇÕES"; ui_sep; ui_fila ""
+    if [ -s "$HEX_PUBKEY" ]; then
+        ui_fila "  ${GREEN}● Chave fixada${NC} - atualização sem assinatura válida é recusada"
+        ui_fila "  Impressão digital:"; ui_fila "  ${YELLOW}$(hex_fingerprint "$HEX_PUBKEY")${NC}"
+        ui_fila ""; ui_bot; echo ""; pause_return; return
+    fi
+    ui_fila "  ${YELLOW}○ Nenhuma chave fixada${NC}: as atualizações são conferidas só por SHA256."
+    ui_fila ""; ui_bot; echo ""
+    tmp=$(mktemp) || return
+    if ! curl -fsSL --connect-timeout 10 "${GITHUB_RAW}/keys/release_pub.pem" -o "$tmp" 2>/dev/null || ! openssl pkey -pubin -in "$tmp" -noout 2>/dev/null; then
+        echo -e "  ${YELLOW}⚠ O projeto ainda não publicou uma chave de assinatura.${NC}"; rm -f "$tmp"; pause_return; return
+    fi
+    echo -e "  Chave publicada no repositório. Impressão digital:"
+    echo -e "  ${YELLOW}$(hex_fingerprint "$tmp")${NC}"
+    echo -e "  ${GRIS}Compare com a que o dono do projeto divulgou em OUTRO lugar (README, perfil).${NC}"
+    echo -ne "\n  ${WHITE}É a mesma? Fixar esta chave? (s/n):${NC} "; read -r c
+    if [ "$c" = "s" ] || [ "$c" = "S" ]; then
+        mkdir -p "$(dirname "$HEX_PUBKEY")"; install -m 644 "$tmp" "$HEX_PUBKEY"
+        echo -e "  ${GREEN}✓ Chave fixada. Daqui em diante só entram atualizações assinadas por ela.${NC}"
+    else
+        echo -e "  ${GRIS}Cancelado${NC}"
+    fi
+    rm -f "$tmp"; pause_return
 }
 hex_sha_esperado() {
     python3 - "$HEX_MANIFEST" "$1" <<'PY'
@@ -304,7 +397,7 @@ hex_instalar_arquivo() {
         py) python3 -c 'import sys; compile(open(sys.argv[1]).read(), sys.argv[1], "exec")' "$tmpf" 2>/dev/null \
                 || { rm -f "$tmpf"; ui_error "Erro de sintaxe em $rel"; return 1; } ;;
     esac
-    [ -s "$dest" ] && cp -p "$dest" "${dest}.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null
+    [ "$5" != "nobackup" ] && [ -s "$dest" ] && cp -p "$dest" "${dest}.backup.$(date +%Y%m%d_%H%M%S)" 2>/dev/null
     chmod "$mode" "$tmpf" && mv -f "$tmpf" "$dest"
 }
 hex_escrever_versao() {
@@ -320,9 +413,24 @@ hex_atualizar_menu() {
     hex_instalar_arquivo hex_ip.sh /usr/local/bin/hex_ip.sh 755 sh && ui_ok "Detector de IP público atualizado"
     return 0
 }
+hex_atualizar_static() {   # arquivos estáticos (Bootstrap, ícones, fontes) listados no manifesto
+    local rel
+    for rel in $(python3 - "$HEX_MANIFEST" <<'PY'
+import json, sys
+for k in json.load(open(sys.argv[1])).get("sha256", {}):
+    if k.startswith("static/") and ".." not in k and not k.startswith("/"):
+        print(k)
+PY
+); do
+        mkdir -p "$(dirname "/opt/hex-webpanel/$rel")"
+        hex_instalar_arquivo "$rel" "/opt/hex-webpanel/$rel" 644 none nobackup || return 1
+    done
+    return 0
+}
 hex_atualizar_templates() {
     [ -d /opt/hex-webpanel/templates ] || { ui_error "O Painel Web não está instalado"; return 1; }
     local ok=0
+    hex_atualizar_static && ui_ok "Arquivos estáticos atualizados" || ok=1
     hex_instalar_arquivo templates/login.html /opt/hex-webpanel/templates/login.html 644 html && ui_ok "login.html atualizado" || ok=1
     hex_instalar_arquivo templates/dashboard.html /opt/hex-webpanel/templates/dashboard.html 644 html && ui_ok "dashboard.html atualizado" || ok=1
     return $ok
@@ -1157,7 +1265,8 @@ gerenciar_usuarios() {
         expired_count=0
         current_timestamp=$(date +%s)
         
-        while IFS=: read -r user pass exp; do
+        while IFS= read -r _linha; do
+        user=${_linha%%:*}; exp=${_linha##*:}
             [ -z "$user" ] && continue
             exp_timestamp=$(date -d "$exp" +%s 2>/dev/null || echo "0")
             if [ "$exp_timestamp" -lt "$current_timestamp" ]; then
@@ -1177,6 +1286,7 @@ gerenciar_usuarios() {
         ui_opcion "4" "Limpeza automática"
         ui_opcion "5" "Mudar senha de usuário"
         ui_opcion "6" "Mudar data de expiração"
+        ui_opcion "7" "Tipo de acesso (túnel / shell)"
         ui_opcion "0" "Voltar"
         
         ui_bot; echo ""
@@ -1189,11 +1299,48 @@ gerenciar_usuarios() {
             4) gerenciar_limpeza ;;
             5) mudar_senha_usuario ;;
             6) mudar_expiracao_usuario ;;
+            7) menu_tipo_acesso ;;
             0) break ;;
             *) echo -e "  ${RED}✗ Opção inválida${NC}"; pause_return ;;
         esac
     done
     menu_principal
+}
+
+menu_tipo_acesso() {
+    local opt sh c n=0 u
+    while true; do
+        sh=$(shell_padrao_novos)
+        clear; ui_top; ui_titulo "TIPO DE ACESSO DOS USUÁRIOS"; ui_sep; ui_fila ""
+        case "$sh" in
+            */nologin|*/false) ui_fila "  Novos usuários: ${GREEN}SÓ TÚNEL${NC} ${GRIS}($sh)${NC} - sem terminal na VPS" ;;
+            *) ui_fila "  Novos usuários: ${YELLOW}COM SHELL${NC} ${GRIS}($sh)${NC} - acesso a terminal na VPS" ;;
+        esac
+        ui_fila ""; ui_fila "  ${GRIS}Contas só de túnel conectam normalmente pelo DTunnel/HTTP Custom na maioria dos casos;${NC}"
+        ui_fila "  ${GRIS}teste com um usuário novo antes de aplicar aos existentes.${NC}"
+        ui_fila ""; ui_sep; ui_fila ""
+        ui_opcion "1" "Novos usuários SÓ TÚNEL ${GREEN}(recomendado)${NC}"
+        ui_opcion "2" "Novos usuários COM SHELL (bash)"
+        ui_opcion "3" "Aplicar o tipo atual a TODOS os usuários existentes"
+        ui_opcion "0" "Voltar"
+        ui_bot; echo ""; echo -ne "  ${CYAN}►${NC} Selecione a opção: "; read -r opt
+        case "$opt" in
+            1) if [ -x /usr/sbin/nologin ]; then echo /usr/sbin/nologin > /etc/hex/user_shell; else echo /bin/false > /etc/hex/user_shell; fi
+               chmod 644 /etc/hex/user_shell; echo -e "  ${GREEN}✓ Novos usuários: só túnel${NC}"; pause_return ;;
+            2) echo /bin/bash > /etc/hex/user_shell; chmod 644 /etc/hex/user_shell
+               echo -e "  ${GREEN}✓ Novos usuários: com shell${NC}"; pause_return ;;
+            3) echo -ne "  ${YELLOW}Trocar o shell de TODOS os usuários para $sh? Quem estiver usando terminal será afetado. (s/n):${NC} "; read -r c
+               if [ "$c" = "s" ] || [ "$c" = "S" ]; then
+                   while IFS= read -r _linha; do
+                       u=${_linha%%:*}; [ -z "$u" ] && continue
+                       id "$u" >/dev/null 2>&1 && usermod -s "$sh" "$u" 2>/dev/null && n=$((n+1))
+                   done < "$USER_DB"
+                   echo -e "  ${GREEN}✓ $n usuário(s) atualizado(s)${NC}"
+               fi; pause_return ;;
+            0) return ;;
+            *) echo -e "  ${RED}✗ Opção inválida${NC}"; pause_return ;;
+        esac
+    done
 }
 
 adicionar_usuario() {
@@ -1208,8 +1355,7 @@ adicionar_usuario() {
     [[ "$days" =~ ^[0-9]+$ ]] && [ "$days" -gt 0 ] && [ "$days" -le 3650 ] || { echo -e "  ${RED}✗ Inválido (1 a 3650)${NC}"; pause_return; return; }
 
     exp_date=$(date -d "+${days} days" +"%Y-%m-%d")
-    user_shell=$(cat /etc/hex/user_shell 2>/dev/null)
-    case "$user_shell" in /bin/bash|/bin/sh|/bin/false|/usr/sbin/nologin) ;; *) user_shell=/bin/bash ;; esac
+    user_shell=$(shell_padrao_novos)
     if ! useradd -m -s "$user_shell" -G "$USER_GROUP" "$new_user" 2>/dev/null; then
         echo -e "  ${RED}✗ Erro ao criar o usuário${NC}"; pause_return; return
     fi
@@ -1218,7 +1364,7 @@ adicionar_usuario() {
         echo -e "  ${RED}✗ Erro ao definir a senha${NC}"; pause_return; return
     fi
     chage -E "$exp_date" "$new_user" && usermod -e "$exp_date" "$new_user"
-    ( db_lock; printf '%s:%s:%s\n' "$new_user" "$new_pass" "$exp_date" >> "$USER_DB" )
+    ( db_lock; printf '%s:%s\n' "$new_user" "$exp_date" >> "$USER_DB" )
 
     echo ""; echo -e "  ${GREEN}✓ Usuário criado${NC}"
     echo -e "  ${BOLD}IP:${NC} $(ip_publico)"
@@ -1250,11 +1396,12 @@ listar_usuarios() {
     current_timestamp=$(date +%s)
     
     echo ""; echo -e "  ${CYAN}╔═══════════════════════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "  ${CYAN}║${NC} ${WHITE}${BOLD}#   Usuário          Senha           Expira          Dias Rest.  Estado${NC}          ${CYAN}║${NC}"
+    echo -e "  ${CYAN}║${NC} ${WHITE}${BOLD}#   Usuário          Acesso          Expira          Dias Rest.  Estado${NC}          ${CYAN}║${NC}"
     echo -e "  ${CYAN}╠═══════════════════════════════════════════════════════════════════════════════╣${NC}"
     
     counter=1
-    while IFS=: read -r user pass exp; do
+    while IFS= read -r _linha; do
+        user=${_linha%%:*}; exp=${_linha##*:}
         if id "$user" >/dev/null 2>&1; then
             exp_timestamp=$(date -d "$exp" +%s 2>/dev/null || echo "0")
             days_left=$(( (exp_timestamp - current_timestamp) / 86400 ))
@@ -1267,8 +1414,8 @@ listar_usuarios() {
                 status="${GREEN}● ATIVO${NC}"; days_color="${GREEN}"; ((active_users++))
             fi
             
-            [ ${#pass} -gt 3 ] && pass_masked="${pass:0:3}***" || pass_masked="***"
-            printf "  ${CYAN}║${NC} ${YELLOW}%-3s${NC} ${WHITE}%-16s${NC} ${GRIS}%-15s${NC} ${WHITE}%-15s${NC} ${days_color}%-11s${NC} %b\n" "$counter" "$user" "$pass_masked" "$exp" "$days_left" "$status"
+            case "$(getent passwd "$user" | cut -d: -f7)" in */nologin|*/false) acesso="túnel" ;; *) acesso="SHELL" ;; esac
+            printf "  ${CYAN}║${NC} ${YELLOW}%-3s${NC} ${WHITE}%-16s${NC} ${GRIS}%-15s${NC} ${WHITE}%-15s${NC} ${days_color}%-11s${NC} %b\n" "$counter" "$user" "$acesso" "$exp" "$days_left" "$status"
             ((counter++))
         fi
     done < "$USER_DB"
@@ -1315,7 +1462,8 @@ mudar_senha_usuario() {
     
     echo ""; echo -e "  ${CYAN}Usuários disponíveis:${NC}"; echo ""
     counter=1
-    while IFS=: read -r user pass exp; do
+    while IFS= read -r _linha; do
+        user=${_linha%%:*}; exp=${_linha##*:}
         [ -z "$user" ] && continue
         if id "$user" >/dev/null 2>&1; then
             printf "    ${YELLOW}[%s]${NC} ${WHITE}%s${NC}  ${GRIS}(Exp: %s)${NC}\n" "$counter" "$user" "$exp"
@@ -1357,7 +1505,6 @@ mudar_senha_usuario() {
         echo -e "  ${RED}✗ Senha inválida (4 a 64 caracteres, sem ':')${NC}"; pause_return; return
     fi
     if printf '%s:%s\n' "$target_user" "$new_pass" | chpasswd 2>/dev/null; then
-        ( db_lock; db_update "$target_user" pass "$new_pass" )
         echo -e "  ${GREEN}✓ Senha de '$target_user' alterada com sucesso${NC}"
         echo -e "  ${GRIS}O usuário pode acessar com a nova senha${NC}"
     else
@@ -1376,7 +1523,8 @@ mudar_expiracao_usuario() {
     current_timestamp=$(date +%s)
     counter=1
     
-    while IFS=: read -r user pass exp; do
+    while IFS= read -r _linha; do
+        user=${_linha%%:*}; exp=${_linha##*:}
         [ -z "$user" ] && continue
         if id "$user" >/dev/null 2>&1; then
             exp_timestamp=$(date -d "$exp" +%s 2>/dev/null || echo "0")
@@ -1537,4 +1685,5 @@ desinstalar() {
 # ═══════════════════════════════════════════════════════════════
 
 [ "$EUID" -ne 0 ] && { echo -e "  ${RED}✗ Requer permissões de root${NC}"; exit 1; }
+migrar_users_db
 menu_principal

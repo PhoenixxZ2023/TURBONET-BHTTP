@@ -1,0 +1,36 @@
+/* Fontes Orbitron e Rajdhani (SIL OFL 1.1), subconjunto latino, hospedadas localmente (via @fontsource). */
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 400;
+  src: url('orbitron-latin-400-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('orbitron-latin-700-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Orbitron';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 900;
+  src: url('orbitron-latin-900-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 500;
+  src: url('rajdhani-latin-500-normal.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Rajdhani';
+  font-style: normal;
+  font-display: swap;
+  font-weight: 700;
+  src: url('rajdhani-latin-700-normal.woff2') format('woff2');
+}

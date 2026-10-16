@@ -236,6 +236,8 @@ https_notes() {
     echo "  $(fingerprint)"
 }
 
+[ "${HEX_SOURCE_ONLY:-0}" = "1" ] && { return 0 2>/dev/null || exit 0; }
+
 case "$1" in
     https)
         force=""; [ "$2" = "--renew" ] && force="force"

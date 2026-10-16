@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Version](https://img.shields.io/badge/version-1.1.8-00c853?style=for-the-badge&logo=github)
+![Version](https://img.shields.io/badge/version-1.2.0-00c853?style=for-the-badge&logo=github)
 ![Ubuntu](https://img.shields.io/badge/Ubuntu-22.04-E95420?style=for-the-badge&logo=ubuntu&logoColor=white)
 ![License](https://img.shields.io/badge/license-MIT-blue?style=for-the-badge)
 ![Bash](https://img.shields.io/badge/Bash-4EAA25?style=for-the-badge&logo=gnu-bash&logoColor=white)
@@ -93,7 +93,7 @@ curl -sSL https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/in
 - **Senha do painel:** não existe mais senha padrão. No primeiro start o painel gera uma senha aleatória, mostrada no fim da instalação e guardada em `/etc/hex/webpanel_initial_password.txt` (apagada quando você troca a senha no dashboard).
 - **HTTPS do painel (automático):** instalação nova já sai com HTTPS (certificado autoassinado criado sozinho). Para mudar depois: `hex_menu` → Painel Web → **8) Segurança do acesso** (ativar/desativar HTTPS, gerar novo certificado, restringir a 127.0.0.1). Também funciona pela linha de comando: `hex_panel_mode.sh https | http | local | external | status`. Nenhum arquivo precisa ser editado à mão; se a mudança fizer o painel parar de responder, ela é desfeita sozinha. O navegador avisa que o certificado não é conhecido (é autoassinado): *Avançado → Continuar*. Para pular o HTTPS na instalação: `HEX_INSTALL_HTTPS=0`.
 - **UDPGW:** por padrão escuta só em `127.0.0.1` (use dentro do túnel SSH). Para expor publicamente: `HEX_UDPGW_PUBLIC=1 bash install.sh` (cria `/etc/hex/udpgw_public`).
-- **Shell dos usuários:** por padrão `/bin/bash`. Para contas só de túnel, teste `echo /usr/sbin/nologin > /etc/hex/user_shell`.
+- **Shell dos usuários:** por padrão **só túnel** (`nologin`). Para dar terminal a novos usuários: `hex_menu` → Gerenciar usuários → 7 (Tipo de acesso). Teste o DTunnel/HTTP Custom com um usuário novo antes de aplicar aos existentes.
 - **CSRF:** todo POST exige token (`csrf_token` no formulário ou cabeçalho `X-CSRF-Token`); excluir/serviços/sair são POST, não links.
 - **Integridade:** os instaladores e o OTA conferem o SHA256 de `version.json`. Para exigir isso sempre: `touch /etc/hex/require_checksum`.
 - **Publicando uma versão:** na raiz do repo rode `./gen_version.sh 1.1.1 "resumo"` antes do commit; ele recalcula os SHA256 de todos os arquivos (inclusive binários).
@@ -106,3 +106,37 @@ curl -sSL https://raw.githubusercontent.com/PhoenixxZ2023/TURBONET-BHTTP/main/in
   - **Nuvem cinza (só DNS):** funciona com qualquer porta (`https://painel.seudominio.com:9000`). O navegador avisa do certificado autoassinado (Avançado → Continuar).
   - **Nuvem laranja (proxy):** a Cloudflare só repassa as portas HTTPS **443, 2053, 2083, 2087, 2096 e 8443** (a 9000 não passa). O menu detecta isso e oferece trocar a porta do painel para 8443. Em SSL/TLS use o modo **Full** (não "Flexible"; o "Full (strict)" recusa certificado autoassinado). O navegador mostra o certificado da Cloudflare, sem aviso.
   - O limite de tentativas de login passa a usar o IP real do visitante (`CF-Connecting-IP`), aceito só quando a conexão vem mesmo de IP da Cloudflare.
+
+---
+
+## 🧰 Para quem mantém o projeto (v1.2.0)
+
+### Estrutura do repositório
+- `src/hex_menu/*.sh`: o menu, dividido em módulos por assunto. `src/lib/`: código compartilhado (download verificado, apt, assinatura). `src/install*.sh.in`: os instaladores.
+- `hex_menu.sh`, `install.sh` e `install_webpanel.sh` são **gerados**: edite em `src/` e rode **`bash build.sh`**. As VPS continuam baixando um arquivo só (o instalador roda por `curl | bash`, sem o repositório em disco). O CI recusa o commit se estiverem desatualizados (`bash build.sh --check`).
+- `static/vendor/`: Bootstrap, ícones e fontes hospedados no painel (sem CDN). As licenças estão em `static/vendor/LICENSES.txt`.
+- `tests/`: `pip install -r tests/requirements.txt && pytest`. Não precisam de root nem alteram a máquina (usam um "sistema falso" no lugar de `useradd`, `systemctl` etc.).
+
+### Publicar uma versão
+1. Edite `src/`, rode `./build.sh`, atualize o `CHANGELOG.md` (a primeira seção `## [x.y.z]` é a versão).
+2. `bash gen_version.sh x.y.z "resumo"` gera o `version.json` (SHA256 de tudo, inclusive `static/`) e, havendo chave, assina.
+3. `pytest` e `bash gen_version.sh --check` precisam passar. Faça commit.
+
+> (Se algum script der "Permission denied", rode `chmod +x *.sh` uma vez, ou chame com `bash script.sh`.)
+
+> Sem o passo 2, **toda instalação falha** com "SHA256 não confere". Por isso o CI roda `--check`.
+
+### Assinatura das atualizações (opcional, recomendada)
+O SHA256 sozinho não protege de quem controla o repositório (publicaria arquivo e hash novos). A assinatura (Ed25519, OpenSSL) fecha isso:
+1. **Ative 2FA/passkey na conta do GitHub** e proteja a branch `main` (sem force push).
+2. `bash sign_release.sh keygen`: cria a chave **privada** em `~/.hex-release/` (**fora do repositório**, faça cópia offline) e a **pública** em `keys/release_pub.pem`.
+3. Publique a **impressão digital** (`bash sign_release.sh fingerprint`) em outro lugar além do repositório (README, perfil).
+4. Daí em diante `bash gen_version.sh` assina (`version.json.sig`). Faça commit de `keys/release_pub.pem`, `version.json` e `version.json.sig`.
+
+Nos servidores: a primeira instalação fixa a chave publicada e **mostra a impressão digital** para conferir (`hex_menu` → Atualizações → 6 também permite fixar/conferir). **Depois de fixada, atualização sem assinatura válida é recusada**, e o repositório não consegue trocar a chave. Limite honesto: na primeira instalação o servidor confia no que baixou; quem não confere a impressão digital continua dependendo do repositório. Recuperação: `HEX_ALLOW_UNSIGNED=1`.
+
+### Binários no GitHub Releases (opcional)
+Para o repositório não crescer a cada binário novo: coloque os binários em `dist/` (ignorado pelo git), rode `bash gen_version.sh` (o manifesto ganha `release_tag`), crie o release com esses arquivos (`gh release create v1.2.0 dist/* --notes ...`) e remova-os do git (`git rm bhttp-server-* hcr-server-*`). Os instaladores baixam do release e, se falhar, usam o arquivo do repositório; o SHA256 vale nos dois casos. Os `v2.4.0` não são usados por nenhum instalador.
+
+- **Senha dos usuários VPN (v1.2.0):** o `users.txt` guarda só `usuario:validade`; a senha fica apenas no hash do sistema (`/etc/shadow`). Arquivos antigos (com senha em texto) são convertidos sozinhos na primeira execução. A lista de usuários do menu passou a mostrar o tipo de acesso (túnel/SHELL) no lugar do pedaço da senha.
+- **Painel sem CDN (v1.2.0):** Bootstrap, ícones e fontes vêm do próprio painel, e uma política de segurança de conteúdo (CSP) impede carregar scripts, estilos ou fontes de outros sites.

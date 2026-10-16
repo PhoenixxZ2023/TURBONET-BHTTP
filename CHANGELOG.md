@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.2.0] - 2026-10-15
+
+### Segurança
+- **Senha fora do `users.txt`**: o arquivo guarda só `usuario:validade`. A senha continua apenas no hash do sistema. Arquivos antigos são convertidos automaticamente (painel e menu). A tela "Listar usuários" mostrava os 3 primeiros caracteres de cada senha; agora mostra o tipo de acesso
+- **Shell padrão dos novos usuários: só túnel (`nologin`)** em vez de `/bin/bash`. Opção no menu (Gerenciar usuários → 7) para dar shell e para aplicar o tipo a todos os existentes
+- **Painel sem CDN**: Bootstrap 5.3.0, Bootstrap Icons 1.11.0 e as fontes Orbitron/Rajdhani são servidos pelo próprio painel (`static/vendor`, com licenças). Antes, sem acesso ao jsDelivr/Google, o painel ficava sem estilo e os modais/avisos paravam. Nenhum site externo recebe mais o IP de quem abre o painel
+- **Content-Security-Policy**: o navegador bloqueia scripts, estilos, fontes e conexões de outros sites (um script externo injetado é barrado)
+- **Atualizações assinadas (opcional)**: `version.json.sig` (Ed25519/OpenSSL), verificado pelos instaladores, pelo menu e pelo OTA do painel. Com a chave fixada no servidor, atualização sem assinatura válida é recusada e o repositório não consegue trocar a chave. Ferramenta do dono: `sign_release.sh`
+- OTA/instaladores baixam os arquivos de `static/` listados no manifesto (caminhos fora de `static/` são recusados) e só trocam os templates se todos os arquivos conferirem
+
+### Infraestrutura
+- **Testes automatizados** (`tests/`, pytest): validações, API de usuários, login/CSRF/sessão/inatividade, Cloudflare, OTA com servidor local, assinatura, instaladores, scripts de shell e consistência do manifesto. Rodam sem root
+- **CI** (`.github/workflows/ci.yml`): sintaxe, ShellCheck, `build.sh --check`, `gen_version.sh --check` e pytest. O `--check` impede publicar arquivos sem regenerar o `version.json` (que quebraria toda instalação)
+- **Scripts gerados a partir de `src/`** (`build.sh`): menu dividido em módulos, uma única cópia do código compartilhado entre os dois instaladores e uma única cópia do script de limpeza. As VPS continuam baixando um arquivo por script
+- **Binários no GitHub Releases** (opcional): `release_tag` no manifesto, com fallback para o repositório e SHA256 nos dois caminhos
+
 ## [1.1.8] - 2026-10-10
 
 ### Segurança

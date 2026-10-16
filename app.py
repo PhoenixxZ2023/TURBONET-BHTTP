@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # ═══════════════════════════════════════════════════════════════
-#  HEX WEB PANEL - backend (v1.1.8)
+#  HEX WEB PANEL - backend (v1.2.0)
 #  Repositório: https://github.com/PhoenixxZ2023/TURBONET-BHTTP
 #
 #  Mudanças de segurança em relação à v1.0.1:
@@ -15,13 +15,16 @@
 #   - system_stats (CPU/RAM/disco) exigido pelo dashboard.html
 #   v1.1.1: ações que alteram estado (delete_user, control_service, logout)
 #           agora são POST; token CSRF obrigatório em todo POST
+#   v1.2.0: painel sem CDN (Bootstrap/ícones/fontes em static/vendor) + Content-Security-Policy;
+#           users.txt guarda só usuário:validade (a senha fica apenas no hash do sistema);
+#           shell padrão dos novos usuários = nologin (só túnel)
 #   v1.1.8: sessão expira por INATIVIDADE (padrão 180 s); IP real atrás da Cloudflare
 #   v1.1.5: `python app.py --reset-password` / `--set-password` (menu: Painel Web > 9)
 #   v1.1.2: HTTPS nativo opcional (HEX_PANEL_TLS=1 + /etc/hex/webpanel_tls/);
 #           use `hex_panel_mode.sh https` em vez de editar arquivos à mão
 # ═══════════════════════════════════════════════════════════════
 import os, re, json, time, hashlib, hmac, secrets, logging, tempfile, threading
-import subprocess, datetime, fcntl, shutil, urllib.request, ssl, sys, ipaddress
+import subprocess, datetime, fcntl, shutil, urllib.request, ssl, sys, ipaddress, base64
 from urllib.parse import urlparse
 
 from flask import Flask, render_template, request, redirect, url_for, flash, jsonify, abort, session
@@ -56,6 +59,8 @@ UPDATE_CACHE_FILE = os.path.join(HEX_DIR, "update_cache.json")
 REQUIRE_CHECKSUM_FILE = os.path.join(HEX_DIR, "require_checksum")
 USER_SHELL_FILE = os.path.join(HEX_DIR, "user_shell")
 TLS_CERT = os.path.join(HEX_DIR, "webpanel_tls", "cert.pem")
+PUBKEY_FILE = os.environ.get("HEX_PUBKEY", os.path.join(HEX_DIR, "release_pub.pem"))   # chave de assinatura fixada
+OPENSSL = shutil.which("openssl") or "/usr/bin/openssl"
 TLS_KEY = os.path.join(HEX_DIR, "webpanel_tls", "key.pem")
 TLS_ENABLED = os.environ.get("HEX_PANEL_TLS") == "1"
 USER_GROUP = "hexusers"
@@ -70,6 +75,11 @@ def _idle_seconds():
 
 
 IDLE_TIMEOUT = _idle_seconds()
+# Política de segurança de conteúdo: nada é carregado de fora (scripts, estilos, fontes, imagens, conexões);
+# 'unsafe-inline' fica porque os templates têm <script>/<style> e onclick inline.
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+       "font-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'self'; "
+       "form-action 'self'; frame-ancestors 'none'")
 PASSIVE_PATHS = {"/api/stats"}   # consultas automáticas em segundo plano NÃO contam como atividade
 
 # Faixas de IPv4 da Cloudflare (https://www.cloudflare.com/ips-v4). Só confiamos no cabeçalho
@@ -320,6 +330,7 @@ def security_headers(resp):
     resp.headers.setdefault("X-Frame-Options", "DENY")
     resp.headers.setdefault("X-Content-Type-Options", "nosniff")
     resp.headers.setdefault("Referrer-Policy", "same-origin")
+    resp.headers.setdefault("Content-Security-Policy", CSP)
     resp.headers.setdefault("Cache-Control", "no-store")
     return resp
 
@@ -372,29 +383,32 @@ def valid_date(s):
 
 
 def get_user_shell():
+    """Shell dos NOVOS usuários. Padrão: só túnel (nologin). `echo /bin/bash > /etc/hex/user_shell` libera shell."""
+    allowed = ('/bin/bash', '/bin/sh', '/bin/false', '/usr/sbin/nologin')
     try:
         with open(USER_SHELL_FILE) as f:
             sh = f.read().strip()
-        if sh in ('/bin/bash', '/bin/sh', '/bin/false', '/usr/sbin/nologin'):
+        if sh in allowed and os.path.exists(sh):
             return sh
     except OSError:
         pass
-    return '/bin/bash'
+    for sh in ('/usr/sbin/nologin', '/bin/false'):
+        if os.path.exists(sh):
+            return sh
+    return '/bin/false'
 
 
 # ───────────────────────── banco de usuários (users.txt) ─────────────────────────
 def _parse_line(line):
-    """user:senha:exp. Tolera ':' dentro da senha (entradas antigas)."""
+    """Lê 'usuário:validade'. Aceita também o formato antigo 'usuário:senha:validade'
+    (a senha, mesmo com ':' dentro, é descartada: o primeiro campo é o usuário e o último é a validade)."""
     line = line.rstrip('\n')
     if not line or ':' not in line:
         return None
     user, rest = line.split(':', 1)
-    if ':' not in rest:
-        return None
-    pwd, exp = rest.rsplit(':', 1)
     if not user:
         return None
-    return user, pwd, exp
+    return user, rest.rsplit(':', 1)[-1]
 
 
 def read_db():
@@ -413,15 +427,34 @@ def read_db():
 
 
 def write_db(entries):
-    write_atomic(USER_DB, ''.join(f"{u}:{p}:{e}\n" for u, p, e in entries), 0o600)
+    write_atomic(USER_DB, ''.join(f"{u}:{e}\n" for u, e in entries), 0o600)
+
+
+def migrate_users_db():
+    """Converte o formato antigo (com senha em texto) para 'usuário:validade'. Idempotente."""
+    try:
+        with DbLock():
+            try:
+                with open(USER_DB) as f:
+                    raw = f.read()
+            except FileNotFoundError:
+                return
+            if any(line.count(':') > 1 for line in raw.splitlines()):
+                write_db([e for e in (_parse_line(l) for l in raw.splitlines()) if e])
+                logging.info("users.txt migrado: senhas em texto removidas do arquivo")
+    except Exception as e:
+        logging.error(f"Falha ao migrar users.txt: {e}")
+
+
+migrate_users_db()   # ao iniciar: remove senhas em texto de um users.txt antigo
 
 
 def db_has(username):
-    return any(u == username for u, _, _ in read_db())
+    return any(u == username for u, _ in read_db())
 
 
 def get_users():
-    return [{"user": u, "exp": e} for u, _, e in read_db()]
+    return [{"user": u, "exp": e} for u, e in read_db()]
 
 
 # ───────────────────────── comandos do sistema ─────────────────────────
@@ -589,6 +622,32 @@ def schedule_restart():
     threading.Thread(target=restart_later, daemon=True).start()
 
 
+def verify_manifest_signature(manifest_bytes, sig_b64, pubkey_path=None):
+    """Confere a assinatura Ed25519 do version.json com a chave fixada (mesma conta que os instaladores/menu fazem)."""
+    key = pubkey_path or PUBKEY_FILE
+    if not (manifest_bytes and sig_b64 and os.path.isfile(key)):
+        return False
+    try:
+        sig = base64.b64decode(sig_b64.strip())
+    except Exception:
+        return False
+    if not sig:
+        return False
+    import tempfile as _tf
+    with _tf.TemporaryDirectory() as d:
+        mp, sp = os.path.join(d, "manifest"), os.path.join(d, "sig")
+        with open(mp, "wb") as f:
+            f.write(manifest_bytes)
+        with open(sp, "wb") as f:
+            f.write(sig)
+        try:
+            r = subprocess.run([OPENSSL, "pkeyutl", "-verify", "-pubin", "-inkey", key, "-rawin", "-in", mp, "-sigfile", sp],
+                               capture_output=True, timeout=15)
+        except (OSError, subprocess.SubprocessError):
+            return False
+    return r.returncode == 0
+
+
 def fetch_verified(relpath, manifest):
     """Baixa um arquivo do repositório e confere o SHA256 do version.json."""
     data = http_get(f"{GITHUB_RAW}/{relpath}")
@@ -625,11 +684,23 @@ def perform_update():
     results = {k: {"success": False, "message": ""} for k in ("menu", "templates", "backend", "version")}
     stamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     try:
-        manifest = json.loads(http_get(f"{GITHUB_RAW}/version.json", timeout=10).decode())
+        raw = http_get(f"{GITHUB_RAW}/version.json", timeout=10)
+        manifest = json.loads(raw.decode())
     except Exception as e:
         for k in results:
             results[k]["message"] = f"Erro ao baixar version.json: {e}"
         return results
+    # Com chave de assinatura fixada, atualização sem assinatura válida é RECUSADA (não dá para "tirar" a assinatura).
+    if os.path.isfile(PUBKEY_FILE) and os.environ.get("HEX_ALLOW_UNSIGNED") != "1":
+        try:
+            sig = http_get(f"{GITHUB_RAW}/version.json.sig", timeout=10)
+        except Exception:
+            sig = b""
+        if not verify_manifest_signature(raw, sig):
+            logging.error("Atualização recusada: version.json sem assinatura válida")
+            for k in results:
+                results[k]["message"] = "Atualização recusada: assinatura do version.json ausente ou inválida"
+            return results
 
     # 1. menu (+ script de limpeza)
     try:
@@ -671,9 +742,18 @@ def perform_update():
                 d = fetch_verified(f"templates/{name}", manifest)
                 check_syntax("html", d, name)
                 blobs[name] = d
+            assets = {}
+            for rel in manifest.get("sha256", {}):
+                if rel.startswith("static/"):
+                    norm = os.path.normpath(rel)
+                    if norm.startswith("..") or os.path.isabs(norm) or not norm.startswith("static" + os.sep):
+                        raise ValueError(f"caminho inválido no manifesto: {rel}")
+                    assets[norm] = fetch_verified(rel, manifest)
             for name, d in blobs.items():
                 install_file(os.path.join(tdir, name), d, 0o644, stamp)
-            results["templates"] = {"success": True, "message": "Templates atualizados"}
+            for rel, d in assets.items():
+                write_atomic(os.path.join(PANEL_DIR, rel), d, 0o644)
+            results["templates"] = {"success": True, "message": f"Templates e {len(assets)} arquivo(s) estático(s) atualizados"}
         else:
             results["templates"] = {"success": True, "message": "Painel não instalado, ignorado"}
     except Exception as e:
@@ -896,7 +976,7 @@ def add_user():
         set_expiry(user, exp_date)
         with DbLock():
             entries = [e for e in read_db() if e[0] != user]
-            entries.append((user, pwd, exp_date))
+            entries.append((user, exp_date))
             write_db(entries)
         logging.info(f"Usuário criado: {user} (exp {exp_date}) por {client_ip()}")
         flash(f"✓ Usuário '{user}' criado com sucesso (Expira: {exp_date})")
@@ -957,8 +1037,6 @@ def edit_password(username):
                 logging.error(f"chpasswd falhou: {res.stderr}")
                 flash("Erro ao alterar a senha")
             else:
-                with DbLock():
-                    write_db([(u, new if u == username else p, e) for u, p, e in read_db()])
                 flash(f"✓ Senha de '{username}' alterada com sucesso")
     except Exception as e:
         logging.error(f"[EDIT_PASS] Erro: {e}", exc_info=True)
@@ -978,7 +1056,7 @@ def edit_expiry(username):
             flash(f"O usuário '{username}' não existe no sistema")
             return redirect(url_for('dashboard'))
 
-        current = next((e for u, _, e in read_db() if u == username), "")
+        current = next((e for u, e in read_db() if u == username), "")
         new_exp, msg = "", ""
         if action == "permanent":
             new_exp, msg = "2099-12-31", f"✓ Usuário '{username}' agora é permanente"
@@ -1003,7 +1081,7 @@ def edit_expiry(username):
 
         set_expiry(username, new_exp)
         with DbLock():
-            write_db([(u, p, new_exp if u == username else e) for u, p, e in read_db()])
+            write_db([(u, new_exp if u == username else e) for u, e in read_db()])
         logging.info(f"[EDIT_EXP] ✓ Expiração de {username} alterada para {new_exp}")
         flash(msg)
     except Exception as e:

@@ -44,6 +44,14 @@ ui_error() { echo -e " ${RED}✗${NC} ${RED}$1${NC}"; }
 ui_info() { echo -e " ${CYAN}ℹ${NC} ${GRIS}$1${NC}"; }
 ui_warn() { echo -e " ${YELLOW}⚠${NC} ${YELLOW}$1${NC}"; }
 
+
+
+
+# ═══════════════════════════════════════════════════════════════
+#  CÓDIGO COMPARTILHADO DOS INSTALADORES (install.sh e install_webpanel.sh)
+#  Fonte única: edite AQUI e rode ./build.sh. Usa as funções ui_* de cada instalador.
+# ═══════════════════════════════════════════════════════════════
+
 baixar_arquivo() {
     local url="$1" destino="$2"
     if command -v curl >/dev/null 2>&1; then
@@ -63,11 +71,21 @@ except Exception:
 PY
 }
 
+# lista as chaves do manifesto que começam com um prefixo (ex.: static/)
+listar_manifesto() {
+    python3 - "$MANIFEST" "$1" <<'PY'
+import json, sys
+for k in json.load(open(sys.argv[1])).get("sha256", {}):
+    if k.startswith(sys.argv[2]) and ".." not in k and not k.startswith("/"):
+        print(k)
+PY
+}
+
 # baixar_verificado <caminho-no-repo> <destino> <modo>
 baixar_verificado() {
-    local rel="$1" dest="$2" mode="${3:-644}" tmpf exp got
+    local rel="$1" dest="$2" mode="${3:-644}" base="${HEX_ASSET_BASE:-$GITHUB_RAW}" tmpf exp got
     tmpf=$(mktemp "$(dirname "$dest")/.dl.XXXXXX") || return 1
-    if ! baixar_arquivo "$GITHUB_RAW/$rel" "$tmpf" || [ ! -s "$tmpf" ]; then
+    if ! baixar_arquivo "$base/$rel" "$tmpf" || [ ! -s "$tmpf" ]; then
         rm -f "$tmpf"; ui_error "Falha ao baixar $rel"; return 1
     fi
     exp=$(sha_esperado "$rel")
@@ -82,14 +100,6 @@ baixar_verificado() {
         ui_warn "version.json sem SHA256 para $rel (sem verificação)"
     fi
     chmod "$mode" "$tmpf" && mv -f "$tmpf" "$dest"
-}
-
-detectar_arquitetura() {
-    case "$(uname -m)" in
-        x86_64|amd64) echo "amd64" ;;
-        aarch64|arm64) echo "arm64" ;;
-        *) ui_error "Arquitetura não suportada: $(uname -m)"; exit 1 ;;
-    esac
 }
 
 # ── apt robusto: espera o bloqueio, tenta de novo, NUNCA remove pacotes e mostra o erro real ──
@@ -139,6 +149,106 @@ apt_opcional() {
 # firewall: ufw só se já estiver ATIVO; regras do iptables persistem se houver netfilter-persistent (imagens Oracle)
 firewall_ufw_ativo() { command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -q "^Status: active"; }
 fw_persistir() { command -v netfilter-persistent >/dev/null 2>&1 && netfilter-persistent save >>"$LOG_FILE" 2>&1; return 0; }
+
+# ═══════════════════════════════════════════════════════════════
+#  ASSINATURA DO version.json (Ed25519 via OpenSSL 3, já presente no Ubuntu 22.04+)
+#  Fonte única: usado pelos instaladores E pelo menu (via ./build.sh).
+#
+#  Modelo de confiança: a chave PÚBLICA fica fixada em /etc/hex/release_pub.pem. Depois de fixada,
+#  atualização sem assinatura válida é RECUSADA (não dá para "tirar" a assinatura e passar).
+#  A chave privada fica só com o dono do projeto, fora do repositório.
+# ═══════════════════════════════════════════════════════════════
+HEX_PUBKEY="${HEX_PUBKEY:-${HEX_DIR:-/etc/hex}/release_pub.pem}"
+
+# impressão digital da chave pública (SHA-256 do DER), em pares hex separados por ":"
+hex_fingerprint() {
+    openssl pkey -pubin -in "$1" -outform DER 2>/dev/null | sha256sum | cut -d' ' -f1 | sed 's/../&:/g; s/:$//'
+}
+
+# hex_verificar_assinatura <manifesto> <assinatura-base64> <chave.pem>  → 0 = válida
+hex_verificar_assinatura() {
+    local man=$1 sig=$2 key=$3 bin rc
+    [ -s "$man" ] && [ -s "$sig" ] && [ -s "$key" ] || return 1
+    bin=$(mktemp) || return 1
+    if ! base64 -d "$sig" > "$bin" 2>/dev/null || [ ! -s "$bin" ]; then rm -f "$bin"; return 1; fi
+    openssl pkeyutl -verify -pubin -inkey "$key" -rawin -in "$man" -sigfile "$bin" >/dev/null 2>&1
+    rc=$?
+    rm -f "$bin"
+    return $rc
+}
+
+# hex_politica_assinatura <manifesto> [assinatura]  → 0 = pode seguir; 1 = recusar (motivo no stdout)
+# Com chave fixada a assinatura é obrigatória. HEX_ALLOW_UNSIGNED=1 desliga (só para recuperação).
+hex_politica_assinatura() {
+    local man=$1 sig=${2:-}
+    [ -s "$HEX_PUBKEY" ] || return 0
+    [ "${HEX_ALLOW_UNSIGNED:-0}" = "1" ] && return 0
+    if [ -n "$sig" ] && hex_verificar_assinatura "$man" "$sig" "$HEX_PUBKEY"; then return 0; fi
+    echo "assinatura ausente ou inválida (chave fixada: $(hex_fingerprint "$HEX_PUBKEY"))"
+    return 1
+}
+
+# campo de primeiro nível do version.json (ex.: release_tag)
+manifesto_campo() {
+    python3 - "$MANIFEST" "$1" <<'PY'
+import json, sys
+try:
+    v = json.load(open(sys.argv[1])).get(sys.argv[2], "")
+    print(v if isinstance(v, str) else "")
+except Exception:
+    print("")
+PY
+}
+
+# Binários grandes ficam no GitHub Releases (não pesam no git). Tenta o release indicado no manifesto
+# (release_tag); se não houver ou falhar, usa o arquivo do repositório. O SHA256 vale nos dois casos.
+baixar_binario() {   # <nome> <destino> <modo>
+    local nome="$1" dest="$2" mode="${3:-755}" tag repo="${GITHUB_REPO:-PhoenixxZ2023/TURBONET-BHTTP}"
+    tag=$(manifesto_campo release_tag)
+    if [ -n "$tag" ]; then
+        if HEX_ASSET_BASE="${HEX_RELEASE_BASE:-https://github.com/$repo/releases/download}/$tag" baixar_verificado "$nome" "$dest" "$mode"; then
+            return 0
+        fi
+        ui_warn "Release $tag indisponível para $nome; tentando o repositório..."
+    fi
+    baixar_verificado "$nome" "$dest" "$mode"
+}
+
+# Baixa o version.json + assinatura e aplica a política. Sem chave fixada: tenta fixar a chave publicada em
+# keys/release_pub.pem (primeira instalação) e MOSTRA a impressão digital para você conferir com o README.
+obter_manifesto() {   # <destino>
+    local dest="$1" sig="$1.sig" pub="$1.pub" motivo
+    baixar_arquivo "$GITHUB_RAW/version.json" "$dest" && [ -s "$dest" ] || { ui_error "Não foi possível baixar o version.json"; return 1; }
+    rm -f "$sig"; baixar_arquivo "$GITHUB_RAW/version.json.sig" "$sig" 2>/dev/null || rm -f "$sig"
+    if [ -s "$HEX_PUBKEY" ]; then
+        if motivo=$(hex_politica_assinatura "$dest" "$sig"); then
+            ui_ok "version.json com assinatura válida"; return 0
+        fi
+        ui_error "Atualização RECUSADA: $motivo"; return 1
+    fi
+    rm -f "$pub"; baixar_arquivo "$GITHUB_RAW/keys/release_pub.pem" "$pub" 2>/dev/null || rm -f "$pub"
+    if [ -s "$pub" ] && [ -s "$sig" ]; then
+        if hex_verificar_assinatura "$dest" "$sig" "$pub"; then
+            mkdir -p "$(dirname "$HEX_PUBKEY")"; install -m 644 "$pub" "$HEX_PUBKEY"
+            ui_ok "Assinatura válida. Chave de assinatura FIXADA neste servidor."
+            ui_info "Impressão digital: $(hex_fingerprint "$HEX_PUBKEY")"
+            ui_info "Confira com a divulgada pelo dono do projeto (README/perfil); a partir de agora, versão sem essa assinatura é recusada."
+            return 0
+        fi
+        ui_error "A assinatura do version.json NÃO confere com a chave publicada. Abortando."; return 1
+    fi
+    ui_warn "Esta versão não está assinada (sem chave publicada). Seguindo apenas com SHA256."
+    return 0
+}
+
+detectar_arquitetura() {
+    case "$(uname -m)" in
+        x86_64|amd64) echo "amd64" ;;
+        aarch64|arm64) echo "arm64" ;;
+        *) ui_error "Arquitetura não suportada: $(uname -m)"; exit 1 ;;
+    esac
+}
+
 
 # abrir_porta <proto> <porta>  (idempotente)
 abrir_porta() {
@@ -194,15 +304,14 @@ baixar_binarios() {
     mkdir -p /opt/bhttp /opt/hcr /opt/udpgw "$HEX_DIR" /var/log/bhttp /var/log/hcr
     chmod 700 "$HEX_DIR"
     MANIFEST="$TMPD/version.json"
-    ui_info "Baixando version.json..."
-    baixar_arquivo "$GITHUB_RAW/version.json" "$MANIFEST" && [ -s "$MANIFEST" ] \
-        || { ui_error "Não foi possível baixar o version.json"; exit 1; }
+    ui_info "Baixando version.json e conferindo a assinatura..."
+    obter_manifesto "$MANIFEST" || exit 1
 
     ui_info "Baixando BHTTP ($ARCH)..."
-    baixar_verificado "bhttp-server-v2.4.1-btun-compat-keepalive-linux-${ARCH}" "$BHTTP_BIN" 755 \
+    baixar_binario "bhttp-server-v2.4.1-btun-compat-keepalive-linux-${ARCH}" "$BHTTP_BIN" 755 \
         && ui_ok "BHTTP baixado" || { ui_error "Falha ao baixar BHTTP"; exit 1; }
     ui_info "Baixando HCR ($ARCH)..."
-    baixar_verificado "hcr-server-linux-${ARCH}" "$HCR_BIN" 755 \
+    baixar_binario "hcr-server-linux-${ARCH}" "$HCR_BIN" 755 \
         && ui_ok "HCR baixado" || { ui_error "Falha ao baixar HCR"; exit 1; }
     sleep 1
 }
